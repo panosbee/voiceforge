@@ -1,0 +1,215 @@
+# ═══════════════════════════════════════════════════════════════════
+# VoiceForge AI — Production Docker Compose
+# DigitalOcean Droplet: PostgreSQL + Redis + API + Web + Nginx
+# ═══════════════════════════════════════════════════════════════════
+
+services:
+  # ── PostgreSQL 16 (Production) ────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: voiceforge-postgres
+    restart: always
+    ports:
+      - '127.0.0.1:5432:5432'  # Bind to localhost only (not exposed externally)
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-voiceforge}
+      POSTGRES_USER: ${POSTGRES_USER:-voiceforge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-voiceforge} -d ${POSTGRES_DB:-voiceforge}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+  # ── Redis 7 (Rate Limiting + Caching) ─────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: voiceforge-redis
+    restart: always
+    ports:
+      - '127.0.0.1:6379:6379'  # Localhost only
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save 60 1000
+      --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD}', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.25'
+    logging:
+      driver: json-file
+      options:
+        max-size: '5m'
+        max-file: '3'
+
+  # ── API Server (Hono + Node.js) ───────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: voiceforge-api
+    restart: always
+    ports:
+      - '127.0.0.1:3001:3001'  # Localhost only (Nginx proxies)
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://${POSTGRES_USER:-voiceforge}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-voiceforge}?sslmode=disable
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:3001/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+    logging:
+      driver: json-file
+      options:
+        max-size: '20m'
+        max-file: '5'
+
+  # ── Web Frontend (Next.js) ────────────────────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.web
+    container_name: voiceforge-web
+    restart: always
+    ports:
+      - '127.0.0.1:3000:3000'  # Localhost only (Nginx proxies)
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:3000']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+    logging:
+      driver: json-file
+      options:
+        max-size: '20m'
+        max-file: '5'
+
+  # ── Nginx Reverse Proxy + SSL ─────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: voiceforge-nginx
+    restart: always
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./docker/certbot/conf:/etc/letsencrypt:ro
+      - ./docker/certbot/www:/var/www/certbot:ro
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+  # ── Certbot (Let's Encrypt SSL) ───────────────────────────────
+  certbot:
+    image: certbot/certbot
+    container_name: voiceforge-certbot
+    volumes:
+      - ./docker/certbot/conf:/etc/letsencrypt
+      - ./docker/certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
+  # ── Background Workers (Data Cleanup + Email Queue) ───────────
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: voiceforge-worker
+    restart: always
+    command: ['node', 'dist/worker.js']
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-voiceforge}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-voiceforge}?sslmode=disable
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+volumes:
+  pgdata:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  default:
+    name: voiceforge-network
+    driver: bridge

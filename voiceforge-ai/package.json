@@ -1,0 +1,28 @@
+{
+  "name": "voiceforge-ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "White-label AI voice receptionist SaaS for Greek SMEs",
+  "author": "Panos Skouras",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "dev": "pnpm --filter @voiceforge/api dev",
+    "dev:web": "pnpm --filter @voiceforge/web dev",
+    "dev:all": "pnpm -r --parallel dev",
+    "build": "pnpm -r build",
+    "build:api": "pnpm --filter @voiceforge/api build",
+    "build:web": "pnpm --filter @voiceforge/web build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "db:generate": "pnpm --filter @voiceforge/api db:generate",
+    "db:migrate": "pnpm --filter @voiceforge/api db:migrate",
+    "db:push": "pnpm --filter @voiceforge/api db:push",
+    "db:studio": "pnpm --filter @voiceforge/api db:studio",
+    "clean": "pnpm -r exec rm -rf node_modules dist .next .turbo"
+  }
+}

@@ -1,0 +1,49 @@
+# ═══════════════════════════════════════════════════════════════════
+# VoiceForge AI — Docker Compose (Local Development)
+# Provides PostgreSQL + pgAdmin for local dev without Supabase
+# ═══════════════════════════════════════════════════════════════════
+
+services:
+  # ── PostgreSQL 16 ─────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: voiceforge-postgres
+    restart: unless-stopped
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_DB: voiceforge
+      POSTGRES_USER: voiceforge
+      POSTGRES_PASSWORD: voiceforge_dev_2024
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U voiceforge -d voiceforge']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── pgAdmin (optional — web-based DB UI) ──────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: voiceforge-pgadmin
+    restart: unless-stopped
+    ports:
+      - '5050:80'
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@voiceforge.ai
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+    driver: local
+  pgadmin_data:
+    driver: local

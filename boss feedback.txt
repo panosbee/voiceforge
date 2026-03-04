@@ -1,0 +1,46 @@
+Feedback: VoiceForge presentation 02.03.
+
+User should be supported to create and upload a knowledge file supported by AI.
+This should include instructions and the prompt as well as background information about the specific business of the customer.
+
+Creation should happen based on the preferred language of the customer.
+
+The user should, decide which languages they want to support. Because they don´t need german customers, if in reality the professional does not support german.
+
+Interrupting the agent should be possible.
+Once it switched to a language it should stay consistent with that
+Date awareness not correct
+It says system information sometimes before it is answering
+It should be able to end the call
+German and english voice has Greek accent. It should sound more native.
+Calender invitation and sms confimariont pending due to Telnyx process.
+
+Technical support chat bot on the platfrom, who helps with onboarding and configuration. Knows how the tool works and how to get proper results.
+
+Customer recognition based on a customer number to access or request sensitive documents.
+
+Basic Tier: 200€
+    • Greek language
+    • Schedule management
+    • SMS Confirmation
+    • 400 minutes call time
+Pro Tier: 400€
+    • Greek, English & German language
+    • 800 minutes of call time
+    • For annual subscription: Generation of Landingpage + 3 revisions included
+
+Enterprise Tier: 999€ (coming soon) – Sign up for waitlist.
+    • Agent Teams for complex enterprise setup
+    • Customer recognition for complex task handling
+    • 2000 minutes of call time
+    • For annual subscription: 
+        ◦ Generation of Landingpage + 3 revisions included
+        ◦ 500 extra Minutes per month
+        ◦ Minutes role over up to 2 months
+
+Top-ups
+    • Extra Language for 50€ per month
+    • Extra 100 minutes for 69€
+    • Landingpage creation and maintenance for 1st year 1500€
+    • Social Media management and Marketing starting from 400€ per month
+
