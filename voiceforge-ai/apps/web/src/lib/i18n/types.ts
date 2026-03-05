@@ -402,6 +402,7 @@ export interface Translations {
     deleteError: string;
     noDocuments: string;
     deleteTitle: string;
+    fileFormatsHint: string;
   };
 
   // ── Flows (Expert Mode) ─────────────────────────────────────────
@@ -558,5 +559,337 @@ export interface Translations {
     hoursAgo: string;
     dayAgo: string;
     daysAgo: string;
+  };
+
+  // ── Admin Panel ────────────────────────────────────────────────
+  admin: {
+    title: string;
+    description: string;
+    wrongPassword: string;
+    connectionError: string;
+    enterPassword: string;
+    loggingIn: string;
+    login: string;
+    keyGenerated: string;
+    errorPrefix: string;
+    confirmReject: string;
+    confirmRevoke: string;
+    logout: string;
+    overview: string;
+    pendingRegistrations: string;
+    activeKeys: string;
+    activeCustomers: string;
+    totalCustomers: string;
+    registrations: string;
+    pending: string;
+    approved: string;
+    rejected: string;
+    keys: string;
+    licenseKeys: string;
+    active: string;
+    pendingActivation: string;
+    expired: string;
+    statusPending: string;
+    statusActive: string;
+    statusApproved: string;
+    statusExpired: string;
+    statusRevoked: string;
+    statusRejected: string;
+    statusSuspended: string;
+    tabRegistrations: string;
+    tabKeys: string;
+    tabCustomers: string;
+    customerRegistrations: string;
+    all: string;
+    noRegistrations: string;
+    fullName: string;
+    phone: string;
+    afm: string;
+    doy: string;
+    address: string;
+    duration: string;
+    date: string;
+    approveAndKey: string;
+    reject: string;
+    noKeys: string;
+    key: string;
+    customer: string;
+    plan: string;
+    status: string;
+    expiry: string;
+    actions: string;
+    months: string;
+    revoke: string;
+    customers: string;
+    noCustomers: string;
+    company: string;
+    licenseExpiry: string;
+    registration: string;
+    email: string;
+    pendingCount: string;
+    total: string;
+  };
+
+  // ── Registration Page ──────────────────────────────────────────
+  register: {
+    title: string;
+    subtitle: string;
+    stepPersonal: string;
+    stepBusiness: string;
+    stepPlan: string;
+    stepConfirm: string;
+    submitted: string;
+    completePayment: string;
+    bankDetails: string;
+    bank: string;
+    copyIban: string;
+    beneficiary: string;
+    depositAmount: string;
+    nextSteps: string;
+    nextStepsItems: string[];
+    hasKeyActivate: string;
+    firstName: string;
+    firstNamePlaceholder: string;
+    lastName: string;
+    lastNamePlaceholder: string;
+    phone: string;
+    password: string;
+    passwordHint: string;
+    confirmPassword: string;
+    confirmPasswordPlaceholder: string;
+    passwordsMismatch: string;
+    companyName: string;
+    companyNamePlaceholder: string;
+    afm: string;
+    afmHint: string;
+    afmError: string;
+    doy: string;
+    doyPlaceholder: string;
+    businessAddress: string;
+    businessAddressPlaceholder: string;
+    popular: string;
+    perMonth: string;
+    subscriptionDuration: string;
+    discount: string;
+    total: string;
+    summary: string;
+    personalInfo: string;
+    name: string;
+    businessInfo: string;
+    companyLabel: string;
+    afmLabel: string;
+    doyLabel: string;
+    addressLabel: string;
+    planAndPayment: string;
+    planLabel: string;
+    durationLabel: string;
+    totalLabel: string;
+    paymentLabel: string;
+    bankTransfer: string;
+    submitRegistration: string;
+    hasAccount: string;
+    hasKey: string;
+    activate: string;
+    submitError: string;
+    submitSuccess: string;
+    serverError: string;
+    durationMonth1: string;
+    durationMonths3: string;
+    durationMonths6: string;
+    durationMonths12: string;
+    monthsLabel: string;
+  };
+
+  // ── Activate Page ──────────────────────────────────────────────
+  activate: {
+    title: string;
+    successTitle: string;
+    successMessage: string;
+    enterKey: string;
+    keyLabel: string;
+    activateBtn: string;
+    activating: string;
+    noAccount: string;
+    register: string;
+    hasAccount: string;
+    login: string;
+    emailReceived: string;
+    enterKeyHere: string;
+    plan: string;
+    company: string;
+    expiresAt: string;
+    goToDashboard: string;
+    activationError: string;
+    serverError: string;
+  };
+
+  // ── Onboarding ─────────────────────────────────────────────────
+  onboarding: {
+    steps: {
+      business: string;
+      plan: string;
+      agent: string;
+      test: string;
+      number: string;
+      review: string;
+    };
+    stepOf: string;
+    // Step Business
+    businessTitle: string;
+    businessSubtitle: string;
+    businessNameLabel: string;
+    businessNamePlaceholder: string;
+    industryLabel: string;
+    industryPlaceholder: string;
+    ownerNameLabel: string;
+    ownerNamePlaceholder: string;
+    emailLabel: string;
+    phoneLabel: string;
+    timezoneLabel: string;
+    timezoneGreece: string;
+    timezoneCyprus: string;
+    // Step Plan
+    planTitle: string;
+    planSubtitle: string;
+    // Step Agent
+    agentTitle: string;
+    agentSubtitle1: string;
+    agentSubtitle2: string;
+    agentNameLabel: string;
+    agentNamePlaceholder: string;
+    agentNameHint: string;
+    voiceLabel: string;
+    voiceHint: string;
+    greetingLabel: string;
+    greetingPlaceholder: string;
+    greetingHint: string;
+    instructionsLabel: string;
+    instructionsPlaceholder: string;
+    instructionsHint: string;
+    kbOptional: string;
+    kbUploadHint: string;
+    femaleVoice: string;
+    maleVoice: string;
+    defaultAgentName: string;
+    defaultGreeting: string;
+    defaultInstructions: string;
+    templateApplied: string;
+    instructionsApplied: string;
+    // Step Test
+    testTitle: string;
+    testSubtitle1: string;
+    testSubtitle2: string;
+    testMicUnavailable: string;
+    testMicEnable: string;
+    testCreating: string;
+    testUpdating: string;
+    testWidgetFailed: string;
+    testCheckConnection: string;
+    testPressButton: string;
+    testSpeakGreek: string;
+    testWidgetActive: string;
+    testPressMic: string;
+    testRefresh: string;
+    testDevMode: string;
+    testDevModeHint: string;
+    testCreateBtn: string;
+    testFirst: string;
+    fillAgentFirst: string;
+    agentUpdated: string;
+    testAgentCreated: string;
+    testAgentError: string;
+    testConnectionError: string;
+    // Step Number
+    numberTitle: string;
+    numberSubtitle: string;
+    numberSearch: string;
+    numberSearchBtn: string;
+    numberSearching: string;
+    numberNoResults: string;
+    numberTryDifferent: string;
+    numberPerMonth: string;
+    numberSkipNote: string;
+    numberSearchError: string;
+    // Step Review
+    reviewTitle: string;
+    reviewSubtitle: string;
+    reviewBusiness: string;
+    reviewCompanyName: string;
+    reviewIndustry: string;
+    reviewOwner: string;
+    reviewPhone: string;
+    reviewTimezone: string;
+    reviewPlan: string;
+    reviewPrice: string;
+    reviewIncludes: string;
+    reviewAgent: string;
+    reviewAgentName: string;
+    reviewVoice: string;
+    reviewGreeting: string;
+    reviewNumber: string;
+    reviewNumberLabel: string;
+    reviewCost: string;
+    reviewNoNumber: string;
+    reviewNextSteps: string;
+    reviewStep1: string;
+    reviewStep2: string;
+    reviewStep3: string;
+    reviewStep4: string;
+    reviewStep5: string;
+    reviewStartBtn: string;
+    editBtn: string;
+    // Toasts
+    accountCreated: string;
+    accountCreateError: string;
+    agentCreated: string;
+    agentCreateError: string;
+    numberAcquired: string;
+    numberAcquireError: string;
+    setupComplete: string;
+    unknownError: string;
+  };
+
+  // ── Support Chatbot ────────────────────────────────────────────
+  supportChat: {
+    title: string;
+    subtitle: string;
+    newChat: string;
+    inputPlaceholder: string;
+    tryLabel: string;
+    greeting: string;
+    connectionError: string;
+    quickPrompts: {
+      howToStart: string;
+      haveMedical: string;
+      haveLaw: string;
+      howKB: string;
+      howPhone: string;
+      whatPlans: string;
+    };
+  };
+
+  // ── KB Wizard ──────────────────────────────────────────────────
+  kbWizard: {
+    question1: string;
+    question1Placeholder: string;
+    question2: string;
+    question2Placeholder: string;
+    question3: string;
+    question3Placeholder: string;
+    question4: string;
+    question4Placeholder: string;
+    knowledgeFile: string;
+    suggestedInstructions: string;
+    suggestedGreeting: string;
+    applyInstructionsBtn: string;
+    createBtn: string;
+  };
+
+  // ── Error Boundary ─────────────────────────────────────────────
+  errorBoundary: {
+    title: string;
+    description: string;
+    tryAgain: string;
+    refreshPage: string;
   };
 }

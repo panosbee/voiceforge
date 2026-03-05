@@ -64,10 +64,10 @@ export function KBWizard({ agentId, language = 'el', onComplete, onApplyPrompt }
       } catch {
         // Fallback to minimal questions if API fails
         setQuestions([
-          { id: 'business_name', question: 'Ποιο είναι το όνομα της επιχείρησής σας;', questionEn: 'What is your business name?', placeholder: 'π.χ. Ιατρείο Παπαδόπουλου', required: true, type: 'text' },
-          { id: 'business_type', question: 'Τι τύπος επιχείρησης είναι;', questionEn: 'What type of business is it?', placeholder: 'π.χ. Δικηγορικό γραφείο', required: true, type: 'text' },
-          { id: 'services', question: 'Ποιες υπηρεσίες προσφέρετε;', questionEn: 'What services do you offer?', placeholder: 'Περιγράψτε τις κύριες υπηρεσίες σας...', required: true, type: 'textarea' },
-          { id: 'working_hours', question: 'Ποιες είναι οι ώρες λειτουργίας σας;', questionEn: 'What are your working hours?', placeholder: 'π.χ. Δευτέρα-Παρασκευή 09:00-17:00', required: true, type: 'textarea' },
+          { id: 'business_name', question: t.kbWizard.question1, questionEn: 'What is your business name?', placeholder: t.kbWizard.question1Placeholder, required: true, type: 'text' },
+          { id: 'business_type', question: t.kbWizard.question2, questionEn: 'What type of business is it?', placeholder: t.kbWizard.question2Placeholder, required: true, type: 'text' },
+          { id: 'services', question: t.kbWizard.question3, questionEn: 'What services do you offer?', placeholder: t.kbWizard.question3Placeholder, required: true, type: 'textarea' },
+          { id: 'working_hours', question: t.kbWizard.question4, questionEn: 'What are your working hours?', placeholder: t.kbWizard.question4Placeholder, required: true, type: 'textarea' },
         ]);
       } finally {
         setIsLoading(false);
@@ -155,7 +155,7 @@ export function KBWizard({ agentId, language = 'el', onComplete, onApplyPrompt }
         <div className="space-y-3">
           <div>
             <label className="block text-sm font-medium text-text-primary mb-1">
-              {isGreek ? 'Αρχείο Γνώσεων' : 'Knowledge File'}
+              {t.kbWizard.knowledgeFile}
             </label>
             <div className="bg-surface-secondary rounded-xl p-4 max-h-48 overflow-y-auto border border-border">
               <pre className="text-xs text-text-secondary whitespace-pre-wrap font-mono">
@@ -166,7 +166,7 @@ export function KBWizard({ agentId, language = 'el', onComplete, onApplyPrompt }
 
           <div>
             <label className="block text-sm font-medium text-text-primary mb-1">
-              {isGreek ? 'Προτεινόμενες Οδηγίες (System Prompt)' : 'Suggested Instructions (System Prompt)'}
+              {t.kbWizard.suggestedInstructions}
             </label>
             <div className="bg-surface-secondary rounded-xl p-4 max-h-32 overflow-y-auto border border-border">
               <pre className="text-xs text-text-secondary whitespace-pre-wrap">{result.generatedPrompt}</pre>
@@ -175,7 +175,7 @@ export function KBWizard({ agentId, language = 'el', onComplete, onApplyPrompt }
 
           <div>
             <label className="block text-sm font-medium text-text-primary mb-1">
-              {isGreek ? 'Προτεινόμενος Χαιρετισμός' : 'Suggested Greeting'}
+              {t.kbWizard.suggestedGreeting}
             </label>
             <div className="bg-surface-secondary rounded-xl p-3 border border-border">
               <p className="text-sm text-text-secondary">{result.generatedGreeting}</p>
@@ -190,7 +190,7 @@ export function KBWizard({ agentId, language = 'el', onComplete, onApplyPrompt }
             className="w-full"
             leftIcon={<Wand2 className="w-4 h-4" />}
           >
-            {isGreek ? 'Εφαρμογή Οδηγιών & Χαιρετισμού' : 'Apply Instructions & Greeting'}
+            {t.kbWizard.applyInstructionsBtn}
           </Button>
         )}
       </div>
@@ -254,7 +254,7 @@ export function KBWizard({ agentId, language = 'el', onComplete, onApplyPrompt }
           disabled={currentStep === 0}
           leftIcon={<ChevronLeft className="w-4 h-4" />}
         >
-          {isGreek ? 'Πίσω' : 'Back'}
+          {t.common.back}
         </Button>
 
         <Button
@@ -263,9 +263,7 @@ export function KBWizard({ agentId, language = 'el', onComplete, onApplyPrompt }
           isLoading={isGenerating}
           rightIcon={isLastQuestion ? <Wand2 className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
         >
-          {isLastQuestion
-            ? (isGreek ? 'Δημιουργία' : 'Generate')
-            : (isGreek ? 'Επόμενο' : 'Next')}
+          {isLastQuestion ? t.kbWizard.createBtn : t.common.next}
         </Button>
       </div>
     </div>

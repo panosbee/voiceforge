@@ -7,6 +7,7 @@
 
 import { useEffect, useCallback, type FormEvent } from 'react';
 import { Button, Input, Textarea, Select } from '@/components/ui';
+import { useI18n } from '@/lib/i18n';
 import { KnowledgeBaseUpload } from '@/components/knowledge-base-upload';
 import { INDUSTRY_LABELS } from '@/lib/utils';
 import { GREEK_VOICES } from '@voiceforge/shared';
@@ -44,18 +45,22 @@ function getDefaults(industry: string, businessName: string) {
   return { greeting, instructions };
 }
 
-const voiceOptions = GREEK_VOICES.map((v) => ({
-  value: v.id,
-  label: `${v.name} (${v.gender === 'female' ? 'Γυναικεία' : 'Ανδρική'})`,
-}));
+// voiceOptions built inside component to use i18n
 
 export function StepAgent({ data, updateData, onNext, onBack }: StepAgentProps) {
+  const { t } = useI18n();
+
+  const voiceOptions = GREEK_VOICES.map((v) => ({
+    value: v.id,
+    label: `${v.name} (${v.gender === 'female' ? t.onboarding.femaleVoice : t.onboarding.maleVoice})`,
+  }));
+
   // Auto-fill defaults when user first lands on this step
   useEffect(() => {
     if (!data.greeting && !data.instructions && data.industry) {
       const defaults = getDefaults(data.industry, data.businessName);
       updateData({
-        agentName: 'Σοφία',
+        agentName: t.onboarding.defaultAgentName,
         greeting: defaults.greeting,
         instructions: defaults.instructions,
       });
@@ -77,56 +82,55 @@ export function StepAgent({ data, updateData, onNext, onBack }: StepAgentProps) 
 
   return (
     <div className="bg-surface border border-border rounded-xl shadow-card p-8">
-      <h2 className="text-xl font-semibold text-text-primary mb-2">Ρυθμίστε τον AI Βοηθό</h2>
+      <h2 className="text-xl font-semibold text-text-primary mb-2">{t.onboarding.agentTitle}</h2>
       <p className="text-sm text-text-secondary mb-6">
-        Προσαρμόστε τον τρόπο που ο βοηθός σας απαντά τις κλήσεις. Έχουμε προ-συμπληρώσει τις
-        ρυθμίσεις βάσει του κλάδου σας.
+        {t.onboarding.agentSubtitle1} {t.onboarding.agentSubtitle2}
       </p>
 
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input
-            label="Όνομα Βοηθού"
-            placeholder="π.χ. Σοφία"
+            label={t.onboarding.agentNameLabel}
+            placeholder={t.onboarding.agentNamePlaceholder}
             value={data.agentName}
             onChange={(e) => updateData({ agentName: e.target.value })}
-            hint="Το όνομα που θα αναφέρει ο βοηθός"
+            hint={t.onboarding.agentNameHint}
             required
           />
           <Select
-            label="Φωνή"
+            label={t.onboarding.voiceLabel}
             options={voiceOptions}
             value={data.voiceId}
             onChange={(e) => updateData({ voiceId: e.target.value })}
-            hint="Ελληνική TTS φωνή"
+            hint={t.onboarding.voiceHint}
           />
         </div>
 
         <Textarea
-          label="Χαιρετισμός"
-          placeholder="Γεια σας, καλωσορίσατε στο..."
+          label={t.onboarding.greetingLabel}
+          placeholder={t.onboarding.greetingPlaceholder}
           value={data.greeting}
           onChange={(e) => updateData({ greeting: e.target.value })}
-          hint="Η πρώτη πρόταση που θα πει ο βοηθός όταν σηκώσει"
+          hint={t.onboarding.greetingHint}
           rows={3}
           required
         />
 
         <Textarea
-          label="Οδηγίες Βοηθού (System Prompt)"
-          placeholder="Είσαι η ψηφιακή βοηθός..."
+          label={t.onboarding.instructionsLabel}
+          placeholder={t.onboarding.instructionsPlaceholder}
           value={data.instructions}
           onChange={(e) => updateData({ instructions: e.target.value })}
-          hint="Αναλυτικές οδηγίες για τη συμπεριφορά του βοηθού. Χρησιμοποιήστε {{μεταβλητές}} για δυναμικά δεδομένα."
+          hint={t.onboarding.instructionsHint}
           rows={12}
           required
         />
 
         {/* Knowledge Base Upload */}
         <div className="border-t border-border pt-5">
-          <h3 className="text-sm font-semibold text-text-primary mb-1">Βάση Γνώσεων (προαιρετικό)</h3>
+          <h3 className="text-sm font-semibold text-text-primary mb-1">{t.onboarding.kbOptional}</h3>
           <p className="text-xs text-text-tertiary mb-3">
-            Ανεβάστε αρχεία με πληροφορίες (τιμοκατάλογο, FAQ, κανονισμούς κ.λπ.) ώστε ο βοηθός να τις χρησιμοποιεί στις κλήσεις.
+            {t.onboarding.kbUploadHint}
           </p>
           <KnowledgeBaseUpload
             agentId={null}
@@ -137,10 +141,10 @@ export function StepAgent({ data, updateData, onNext, onBack }: StepAgentProps) 
 
         <div className="flex justify-between pt-4">
           <Button variant="outline" onClick={onBack} type="button">
-            Πίσω
+            {t.common.back}
           </Button>
           <Button type="submit" disabled={!isValid}>
-            Επόμενο
+            {t.common.next}
           </Button>
         </div>
       </form>

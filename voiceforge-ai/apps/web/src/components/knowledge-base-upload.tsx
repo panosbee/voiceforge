@@ -357,7 +357,7 @@ export function KnowledgeBaseUpload({ agentId, onDocumentsChange, compact = fals
             {isDragOver ? t.knowledgeBase.dropFiles : t.knowledgeBase.dragOrClick}
           </p>
           <p className="text-xs text-text-tertiary mt-1">
-            PDF, DOCX, TXT, MD, CSV, HTML, EPUB — Μέχρι {MAX_FILE_SIZE_MB}MB
+            {t.knowledgeBase.fileFormatsHint} {MAX_FILE_SIZE_MB}MB
           </p>
         </div>
       )}

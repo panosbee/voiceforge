@@ -20,25 +20,7 @@ interface ChatMessage {
   error?: boolean;
 }
 
-/** Quick suggestion chips — industry-aware */
-const QUICK_SUGGESTIONS = {
-  el: [
-    'Πώς ξεκινάω;',
-    'Έχω ιατρείο',
-    'Έχω δικηγορικό γραφείο',
-    'Πώς ανεβάζω Βάση Γνώσεων;',
-    'Πώς συνδέω τηλέφωνο;',
-    'Τι πλάνα υπάρχουν;',
-  ],
-  en: [
-    'How do I start?',
-    'I have a dental clinic',
-    'I have a law office',
-    'How to upload Knowledge Base?',
-    'How to connect a phone?',
-    'What plans are available?',
-  ],
-};
+// Quick suggestions built from i18n in the component
 
 /** Get auth token — uses dev cookie or Supabase session */
 async function getAuthToken(): Promise<string | null> {
@@ -60,8 +42,7 @@ async function getAuthToken(): Promise<string | null> {
 }
 
 export function SupportChatbot() {
-  const { locale } = useI18n();
-  const isGreek = locale === 'el';
+  const { t, locale } = useI18n();
 
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -77,13 +58,11 @@ export function SupportChatbot() {
       setMessages([{
         id: 'greeting',
         role: 'assistant',
-        content: isGreek
-          ? '👋 Γεια σας! Είμαι ο AI τεχνικός βοηθός του VoiceForge. Μπορώ να σας βοηθήσω να ρυθμίσετε τον AI βοηθό σας, να σας εξηγήσω πώς λειτουργεί η πλατφόρμα, ή να σας δώσω εξειδικευμένες συμβουλές για τον κλάδο σας.\n\nΠείτε μου τι χρειάζεστε!'
-          : '👋 Hello! I\'m the VoiceForge AI technical assistant. I can help you set up your AI assistant, explain how the platform works, or give you specialized advice for your industry.\n\nTell me what you need!',
+        content: t.supportChat.greeting,
         timestamp: new Date(),
       }]);
     }
-  }, [isOpen, messages.length, isGreek]);
+  }, [isOpen, messages.length, t]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -162,9 +141,7 @@ export function SupportChatbot() {
       const errorMsg: ChatMessage = {
         id: `e_${Date.now()}`,
         role: 'assistant',
-        content: isGreek
-          ? '⚠️ Δεν μπόρεσα να συνδεθώ τώρα. Δοκιμάστε ξανά σε λίγο ή γράψτε στο support@voiceforge.ai'
-          : '⚠️ Couldn\'t connect right now. Please try again shortly or email support@voiceforge.ai',
+        content: '⚠️ ' + t.supportChat.connectionError,
         timestamp: new Date(),
         error: true,
       };
@@ -173,7 +150,7 @@ export function SupportChatbot() {
     } finally {
       setIsLoading(false);
     }
-  }, [isLoading, messages, locale, isGreek]);
+  }, [isLoading, messages, locale]);
 
   const handleSend = (e: FormEvent) => {
     e.preventDefault();
@@ -189,14 +166,19 @@ export function SupportChatbot() {
     setMessages([{
       id: 'greeting',
       role: 'assistant',
-      content: isGreek
-        ? '👋 Γεια σας! Πώς μπορώ να σας βοηθήσω;'
-        : '👋 Hello! How can I help you?',
+      content: '👋 ' + t.supportChat.greeting,
       timestamp: new Date(),
     }]);
   };
 
-  const suggestions = QUICK_SUGGESTIONS[isGreek ? 'el' : 'en'];
+  const suggestions = [
+    t.supportChat.quickPrompts.howToStart,
+    t.supportChat.quickPrompts.haveMedical,
+    t.supportChat.quickPrompts.haveLaw,
+    t.supportChat.quickPrompts.howKB,
+    t.supportChat.quickPrompts.howPhone,
+    t.supportChat.quickPrompts.whatPlans,
+  ];
 
   return (
     <>
@@ -205,7 +187,7 @@ export function SupportChatbot() {
         <button
           onClick={() => setIsOpen(true)}
           className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-brand-500 text-white shadow-lg hover:bg-brand-600 transition-all hover:scale-105 flex items-center justify-center group"
-          aria-label={isGreek ? 'AI Τεχνική Υποστήριξη' : 'AI Technical Support'}
+          aria-label={t.supportChat.title}
         >
           <MessageCircle className="w-6 h-6" />
           <span className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white animate-pulse" />
@@ -223,10 +205,10 @@ export function SupportChatbot() {
               </div>
               <div>
                 <p className="text-sm font-semibold">
-                  {isGreek ? 'AI Τεχνική Υποστήριξη' : 'AI Technical Support'}
+                  {t.supportChat.title}
                 </p>
                 <p className="text-xs text-white/70">
-                  {isGreek ? 'Powered by AI — πάντα διαθέσιμος' : 'Powered by AI — always available'}
+                  {t.supportChat.subtitle}
                 </p>
               </div>
             </div>
@@ -234,7 +216,7 @@ export function SupportChatbot() {
               <button
                 onClick={handleReset}
                 className="p-1.5 rounded-lg hover:bg-white/20 transition-colors"
-                title={isGreek ? 'Νέα συνομιλία' : 'New conversation'}
+                title={t.supportChat.newChat}
               >
                 <RefreshCw className="w-4 h-4" />
               </button>
@@ -309,7 +291,7 @@ export function SupportChatbot() {
             {showSuggestions && messages.length <= 1 && (
               <div className="pt-2">
                 <p className="text-xs text-text-tertiary mb-2">
-                  {isGreek ? '💡 Δοκιμάστε:' : '💡 Try:'}
+                  💡 {t.supportChat.tryLabel}
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {suggestions.map((s, i) => (
@@ -338,7 +320,7 @@ export function SupportChatbot() {
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder={isGreek ? 'Ρωτήστε οτιδήποτε...' : 'Ask anything...'}
+              placeholder={t.supportChat.inputPlaceholder}
               disabled={isLoading}
               className="flex-1 bg-surface-secondary rounded-xl px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-brand-500/30 border border-transparent focus:border-brand-500/40 disabled:opacity-60"
             />

@@ -98,9 +98,7 @@ export function AgentEditModal({ agentId, onClose, onSaved }: AgentEditModalProp
           setSupportedLanguages(template.suggestedLanguages);
         }
         toast.success(
-          supportedLanguages[0] === 'el'
-            ? `✨ Template "${template.nameEl}" εφαρμόστηκε! Προσαρμόστε τα πεδία.`
-            : `✨ Template "${template.nameEn}" applied! Customize the fields.`,
+          `✨ ${template.nameEl} — ${t.onboarding.templateApplied}`,
         );
       }
     }

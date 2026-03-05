@@ -7,6 +7,7 @@
 
 import { Button } from '@/components/ui';
 import { INDUSTRY_LABELS, PLAN_LABELS, formatPhoneNumber } from '@/lib/utils';
+import { useI18n } from '@/lib/i18n';
 import { GREEK_VOICES } from '@voiceforge/shared';
 import { CheckCircle, Building2, CreditCard, Bot, Phone, Pencil } from 'lucide-react';
 import type { OnboardingData } from './page';
@@ -24,12 +25,14 @@ function SectionCard({
   icon,
   stepIndex,
   goToStep,
+  editLabel,
   children,
 }: {
   title: string;
   icon: React.ReactNode;
   stepIndex: number;
   goToStep: (step: number) => void;
+  editLabel: string;
   children: React.ReactNode;
 }) {
   return (
@@ -45,7 +48,7 @@ function SectionCard({
           className="flex items-center gap-1 text-sm text-brand-600 hover:text-brand-700 font-medium"
         >
           <Pencil className="w-3.5 h-3.5" />
-          Επεξεργασία
+          {editLabel}
         </button>
       </div>
       {children}
@@ -63,6 +66,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 }
 
 export function StepReview({ data, onBack, onSubmit, isSubmitting, goToStep }: StepReviewProps) {
+  const { t } = useI18n();
   const voiceName = GREEK_VOICES.find((v) => v.id === data.voiceId)?.name ?? data.voiceId;
   const planInfo = PLAN_LABELS[data.plan]!;
 
@@ -72,71 +76,71 @@ export function StepReview({ data, onBack, onSubmit, isSubmitting, goToStep }: S
         <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-success-50 mb-3">
           <CheckCircle className="w-6 h-6 text-success-500" />
         </div>
-        <h2 className="text-xl font-semibold text-text-primary">Σύνοψη Εγκατάστασης</h2>
+        <h2 className="text-xl font-semibold text-text-primary">{t.onboarding.reviewTitle}</h2>
         <p className="text-sm text-text-secondary mt-1">
-          Ελέγξτε τα στοιχεία σας πριν ξεκινήσουμε.
+          {t.onboarding.reviewSubtitle}
         </p>
       </div>
 
       <div className="space-y-4 mb-8">
         {/* Business */}
-        <SectionCard title="Επιχείρηση" icon={<Building2 className="w-5 h-5 text-brand-500" />} stepIndex={0} goToStep={goToStep}>
-          <InfoRow label="Επωνυμία" value={data.businessName} />
-          <InfoRow label="Κλάδος" value={INDUSTRY_LABELS[data.industry] ?? data.industry} />
-          <InfoRow label="Ιδιοκτήτης" value={data.ownerName} />
+        <SectionCard title={t.onboarding.reviewBusiness} icon={<Building2 className="w-5 h-5 text-brand-500" />} stepIndex={0} goToStep={goToStep} editLabel={t.onboarding.editBtn}>
+          <InfoRow label={t.onboarding.reviewCompanyName} value={data.businessName} />
+          <InfoRow label={t.onboarding.reviewIndustry} value={INDUSTRY_LABELS[data.industry] ?? data.industry} />
+          <InfoRow label={t.onboarding.reviewOwner} value={data.ownerName} />
           <InfoRow label="Email" value={data.email} />
-          <InfoRow label="Τηλέφωνο" value={data.phone} />
-          <InfoRow label="Ζώνη Ώρας" value={data.timezone} />
+          <InfoRow label={t.onboarding.reviewPhone} value={data.phone} />
+          <InfoRow label={t.onboarding.reviewTimezone} value={data.timezone} />
         </SectionCard>
 
         {/* Plan */}
-        <SectionCard title="Πακέτο" icon={<CreditCard className="w-5 h-5 text-brand-500" />} stepIndex={1} goToStep={goToStep}>
-          <InfoRow label="Πακέτο" value={planInfo.name} />
-          <InfoRow label="Τιμή" value={`${planInfo.price}/μήνα`} />
-          <InfoRow label="Περιλαμβάνει" value={planInfo.description} />
+        <SectionCard title={t.onboarding.reviewPlan} icon={<CreditCard className="w-5 h-5 text-brand-500" />} stepIndex={1} goToStep={goToStep} editLabel={t.onboarding.editBtn}>
+          <InfoRow label={t.onboarding.reviewPlan} value={planInfo.name} />
+          <InfoRow label={t.onboarding.reviewPrice} value={`${planInfo.price}${t.onboarding.numberPerMonth}`} />
+          <InfoRow label={t.onboarding.reviewIncludes} value={planInfo.description} />
         </SectionCard>
 
         {/* Agent */}
-        <SectionCard title="AI Βοηθός" icon={<Bot className="w-5 h-5 text-brand-500" />} stepIndex={2} goToStep={goToStep}>
-          <InfoRow label="Όνομα" value={data.agentName} />
-          <InfoRow label="Φωνή" value={voiceName} />
+        <SectionCard title={t.onboarding.reviewAgent} icon={<Bot className="w-5 h-5 text-brand-500" />} stepIndex={2} goToStep={goToStep} editLabel={t.onboarding.editBtn}>
+          <InfoRow label={t.onboarding.reviewAgentName} value={data.agentName} />
+          <InfoRow label={t.onboarding.reviewVoice} value={voiceName} />
           <div className="mt-2 pt-2 border-t border-border">
-            <p className="text-xs text-text-tertiary mb-1">Χαιρετισμός:</p>
+            <p className="text-xs text-text-tertiary mb-1">{t.onboarding.reviewGreeting}:</p>
             <p className="text-sm text-text-secondary italic">&ldquo;{data.greeting.slice(0, 120)}{data.greeting.length > 120 ? '...' : ''}&rdquo;</p>
           </div>
         </SectionCard>
 
         {/* Phone Number */}
-        <SectionCard title="Τηλεφωνικός Αριθμός" icon={<Phone className="w-5 h-5 text-brand-500" />} stepIndex={4} goToStep={goToStep}>
+        <SectionCard title={t.onboarding.reviewNumber} icon={<Phone className="w-5 h-5 text-brand-500" />} stepIndex={4} goToStep={goToStep} editLabel={t.onboarding.editBtn}>
           {data.selectedNumber ? (
             <>
-              <InfoRow label="Αριθμός" value={formatPhoneNumber(data.selectedNumber)} />
-              {data.numberMonthlyCost && <InfoRow label="Κόστος" value={`${data.numberMonthlyCost}/μήνα`} />}
+              <InfoRow label={t.onboarding.reviewNumberLabel} value={formatPhoneNumber(data.selectedNumber)} />
+              {data.numberMonthlyCost && <InfoRow label={t.onboarding.reviewCost} value={`${data.numberMonthlyCost}${t.onboarding.numberPerMonth}`} />}
             </>
           ) : (
-            <p className="text-sm text-text-tertiary italic">Δεν επιλέχθηκε αριθμός — μπορείτε να προσθέσετε αργότερα</p>
+            <p className="text-sm text-text-tertiary italic">{t.onboarding.reviewNoNumber}</p>
           )}
         </SectionCard>
       </div>
 
       {/* What happens next */}
       <div className="bg-brand-50/50 border border-brand-200 rounded-xl p-5 mb-8">
-        <h4 className="text-sm font-semibold text-brand-800 mb-2">Τι θα γίνει μετά:</h4>
+        <h4 className="text-sm font-semibold text-brand-800 mb-2">{t.onboarding.reviewNextSteps}</h4>
         <ol className="text-sm text-brand-700 space-y-1 list-decimal list-inside">
-          <li>Δημιουργία λογαριασμού VoiceForge</li>
-          <li>Ρύθμιση AI βοηθού (ElevenLabs) με τις οδηγίες σας</li>
-          {data.kbDocumentIds.length > 0 && <li>Σύνδεση βάσης γνώσεων ({data.kbDocumentIds.length} αρχεία)</li>}
-          {data.selectedNumber && <li>Αγορά & σύνδεση τηλεφωνικού αριθμού</li>}
-          <li>Ο βοηθός σας θα είναι έτοιμος!</li>
+          <li>{t.onboarding.reviewStep1}</li>
+          <li>{t.onboarding.reviewStep2}</li>
+          {data.kbDocumentIds.length > 0 && <li>{t.onboarding.reviewStep3} ({data.kbDocumentIds.length})</li>}
+          {data.selectedNumber && <li>{t.onboarding.reviewStep4}</li>}
+          <li>{t.onboarding.reviewStep5}</li>
         </ol>
       </div>
 
       <div className="flex justify-between">
         <Button variant="outline" onClick={onBack} disabled={isSubmitting}>
-          Πίσω
+          {t.common.back}
         </Button>
         <Button onClick={onSubmit} isLoading={isSubmitting} size="lg">
-          🚀 Ξεκινήστε!
+          {t.onboarding.reviewStartBtn}
         </Button>
       </div>
     </div>

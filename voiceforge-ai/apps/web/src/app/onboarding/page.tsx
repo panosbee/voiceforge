@@ -11,6 +11,7 @@ import { api } from '@/lib/api-client';
 import { useAuthStore } from '@/stores/auth-store';
 import { toast } from 'sonner';
 import type { Industry, Plan, ApiResponse, CustomerProfile } from '@voiceforge/shared';
+import { useI18n } from '@/lib/i18n';
 
 import { StepBusiness } from './step-business';
 import { StepPlan } from './step-plan';
@@ -19,15 +20,8 @@ import { StepTest } from './step-test';
 import { StepNumber } from './step-number';
 import { StepReview } from './step-review';
 
-// Wizard step definition
-const STEPS = [
-  { id: 'business', label: 'Επιχείρηση', number: 1 },
-  { id: 'plan', label: 'Πακέτο', number: 2 },
-  { id: 'agent', label: 'Βοηθός', number: 3 },
-  { id: 'test', label: 'Δοκιμή', number: 4 },
-  { id: 'number', label: 'Αριθμός', number: 5 },
-  { id: 'review', label: 'Σύνοψη', number: 6 },
-] as const;
+// Step IDs for wizard navigation
+const STEP_IDS = ['business', 'plan', 'agent', 'test', 'number', 'review'] as const;
 
 /** Full onboarding data collected across all steps */
 export interface OnboardingData {
@@ -80,6 +74,7 @@ const initialData: OnboardingData = {
 export default function OnboardingPage() {
   const router = useRouter();
   const { setProfile } = useAuthStore();
+  const { t } = useI18n();
 
   const [currentStep, setCurrentStep] = useState(0);
   const [data, setData] = useState<OnboardingData>(initialData);
@@ -92,7 +87,7 @@ export default function OnboardingPage() {
 
   /** Move to next step */
   const nextStep = useCallback(() => {
-    setCurrentStep((prev) => Math.min(prev + 1, STEPS.length - 1));
+    setCurrentStep((prev) => Math.min(prev + 1, STEP_IDS.length - 1));
   }, []);
 
   /** Move to previous step */
@@ -116,11 +111,11 @@ export default function OnboardingPage() {
       });
 
       if (!registerResult.success) {
-        toast.error('Σφάλμα δημιουργίας λογαριασμού');
+        toast.error(t.onboarding.accountCreateError);
         return;
       }
 
-      toast.success('Λογαριασμός δημιουργήθηκε!');
+      toast.success(t.onboarding.accountCreated);
 
       // 2. Create the AI agent (reuse preview ElevenLabs agent if exists)
       const agentResult = await api.post<ApiResponse<{ id: string }>>('/api/agents', {
@@ -135,12 +130,12 @@ export default function OnboardingPage() {
       });
 
       if (!agentResult.success) {
-        toast.error('Σφάλμα δημιουργίας βοηθού');
+        toast.error(t.onboarding.agentCreateError);
         return;
       }
 
       const agentId = agentResult.data!.id;
-      toast.success('AI βοηθός δημιουργήθηκε!');
+      toast.success(t.onboarding.agentCreated);
 
       // 3. Purchase phone number & assign to agent
       if (data.selectedNumber) {
@@ -150,9 +145,9 @@ export default function OnboardingPage() {
         });
 
         if (numberResult.success) {
-          toast.success(`Αριθμός ${data.selectedNumber} αποκτήθηκε!`);
+          toast.success(`${data.selectedNumber} ${t.onboarding.numberAcquired}`);
         } else {
-          toast.warning('Ο αριθμός δεν μπόρεσε να αποκτηθεί. Μπορείτε να δοκιμάσετε αργότερα.');
+          toast.warning(t.onboarding.numberAcquireError);
         }
       }
 
@@ -165,11 +160,11 @@ export default function OnboardingPage() {
         setProfile(profileResult.data);
       }
 
-      toast.success('Η εγκατάσταση ολοκληρώθηκε! Καλώς ήρθατε!');
+      toast.success(t.onboarding.setupComplete);
       router.push('/dashboard');
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Άγνωστο σφάλμα';
-      toast.error(`Σφάλμα: ${message}`);
+      const message = err instanceof Error ? err.message : t.onboarding.unknownError;
+      toast.error(`${t.admin.errorPrefix}: ${message}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -218,7 +213,7 @@ export default function OnboardingPage() {
               </svg>
             </div>
             <span className="text-lg font-bold text-text-primary">VoiceForge AI</span>
-            <span className="text-sm text-text-secondary ml-auto">Βήμα {currentStep + 1} από {STEPS.length}</span>
+            <span className="text-sm text-text-secondary ml-auto">{t.onboarding.stepOf.replace('{current}', String(currentStep + 1)).replace('{total}', String(STEP_IDS.length))}</span>
           </div>
         </div>
       </div>
@@ -227,8 +222,11 @@ export default function OnboardingPage() {
       <div className="bg-surface border-b border-border">
         <div className="max-w-3xl mx-auto px-4 py-3">
           <div className="flex items-center gap-2">
-            {STEPS.map((step, index) => (
-              <div key={step.id} className="flex items-center flex-1">
+            {STEP_IDS.map((stepId, index) => {
+              const stepLabels = t.onboarding.steps;
+              const label = stepLabels[stepId as keyof typeof stepLabels] || stepId;
+              return (
+              <div key={stepId} className="flex items-center flex-1">
                 {/* Step Circle */}
                 <div
                   className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium shrink-0 transition-colors ${
@@ -248,7 +246,7 @@ export default function OnboardingPage() {
                       />
                     </svg>
                   ) : (
-                    step.number
+                    index + 1
                   )}
                 </div>
                 {/* Step Label */}
@@ -257,10 +255,10 @@ export default function OnboardingPage() {
                     index <= currentStep ? 'text-text-primary font-medium' : 'text-text-tertiary'
                   }`}
                 >
-                  {step.label}
+                  {label}
                 </span>
                 {/* Connector Line */}
-                {index < STEPS.length - 1 && (
+                {index < STEP_IDS.length - 1 && (
                   <div
                     className={`flex-1 h-0.5 mx-3 rounded ${
                       index < currentStep ? 'bg-brand-500' : 'bg-border'
@@ -268,7 +266,8 @@ export default function OnboardingPage() {
                   />
                 )}
               </div>
-            ))}
+            );
+            })}
           </div>
         </div>
       </div>

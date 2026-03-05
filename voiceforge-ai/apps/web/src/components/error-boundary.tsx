@@ -7,7 +7,39 @@
 
 import React, { Component, type ReactNode } from 'react';
 import { Button } from '@/components/ui';
+import { useI18n } from '@/lib/i18n';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
+
+/** Functional wrapper for the default error fallback so we can use hooks */
+function DefaultErrorFallback({ error, resetError }: { error: Error; resetError: () => void }) {
+  const { t } = useI18n();
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[300px] p-8">
+      <div className="w-16 h-16 rounded-full bg-danger-50 flex items-center justify-center mb-4">
+        <AlertTriangle className="w-8 h-8 text-danger-500" />
+      </div>
+      <h2 className="text-lg font-semibold text-text-primary mb-2">{t.errorBoundary.title}</h2>
+      <p className="text-sm text-text-secondary mb-6 text-center max-w-md">
+        {t.errorBoundary.description}
+      </p>
+      <div className="flex gap-3">
+        <Button variant="outline" onClick={resetError} leftIcon={<RefreshCw className="w-4 h-4" />}>
+          {t.errorBoundary.tryAgain}
+        </Button>
+        <Button variant="primary" onClick={() => window.location.reload()}>
+          {t.errorBoundary.refreshPage}
+        </Button>
+      </div>
+      {process.env.NODE_ENV === 'development' && (
+        <pre className="mt-6 p-4 bg-surface-secondary rounded-lg text-xs text-danger-500 max-w-lg overflow-auto">
+          {error.message}
+          {'\n'}
+          {error.stack}
+        </pre>
+      )}
+    </div>
+  );
+}
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -45,30 +77,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       }
 
       return (
-        <div className="flex flex-col items-center justify-center min-h-[300px] p-8">
-          <div className="w-16 h-16 rounded-full bg-danger-50 flex items-center justify-center mb-4">
-            <AlertTriangle className="w-8 h-8 text-danger-500" />
-          </div>
-          <h2 className="text-lg font-semibold text-text-primary mb-2">Κάτι πήγε στραβά</h2>
-          <p className="text-sm text-text-secondary mb-6 text-center max-w-md">
-            Παρουσιάστηκε ένα απρόσμενο σφάλμα. Δοκιμάστε να ανανεώσετε τη σελίδα.
-          </p>
-          <div className="flex gap-3">
-            <Button variant="outline" onClick={this.resetError} leftIcon={<RefreshCw className="w-4 h-4" />}>
-              Δοκιμάστε ξανά
-            </Button>
-            <Button variant="primary" onClick={() => window.location.reload()}>
-              Ανανέωση σελίδας
-            </Button>
-          </div>
-          {process.env.NODE_ENV === 'development' && (
-            <pre className="mt-6 p-4 bg-surface-secondary rounded-lg text-xs text-danger-500 max-w-lg overflow-auto">
-              {this.state.error.message}
-              {'\n'}
-              {this.state.error.stack}
-            </pre>
-          )}
-        </div>
+        <DefaultErrorFallback error={this.state.error} resetError={this.resetError} />
       );
     }
 

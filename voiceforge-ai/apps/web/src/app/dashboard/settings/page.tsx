@@ -69,35 +69,35 @@ export default function SettingsPage() {
 
             <form onSubmit={handleSaveProfile} className="space-y-4">
               <Input
-                label="Επωνυμία Επιχείρησης"
+                label={t.settings.businessName}
                 value={businessName}
                 onChange={(e) => setBusinessName(e.target.value)}
                 required
               />
               <Input
-                label="Ονοματεπώνυμο"
+                label={t.settings.ownerName}
                 value={ownerName}
                 onChange={(e) => setOwnerName(e.target.value)}
                 required
               />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Input
-                  label="Email"
+                  label={t.settings.email}
                   value={profile?.email ?? ''}
                   disabled
-                  hint="Το email δεν μπορεί να αλλάξει"
+                  hint={t.settings.emailNoChange}
                 />
                 <Input
-                  label="Τηλέφωνο"
+                  label={t.settings.phone}
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                 />
               </div>
               <Select
-                label="Ζώνη Ώρας"
+                label={t.settings.timezone}
                 options={[
-                  { value: 'Europe/Athens', label: 'Ελλάδα (Europe/Athens)' },
-                  { value: 'Europe/Nicosia', label: 'Κύπρος (Europe/Nicosia)' },
+                  { value: 'Europe/Athens', label: t.settings.greece },
+                  { value: 'Europe/Nicosia', label: t.settings.cyprus },
                 ]}
                 value={timezone}
                 onChange={(e) => setTimezone(e.target.value)}

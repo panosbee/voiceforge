@@ -34,33 +34,28 @@ const PLANS: Plan[] = [
   {
     id: 'basic',
     name: 'Basic',
-    description: 'Για μικρές επιχειρήσεις',
     priceMonthly: 200,
-    features: ['Ελληνική γλώσσα', '1 AI Agent', '1 Αριθμός', '400 λεπτά/μήνα', 'Διαχείριση ραντεβού', 'SMS'],
+    features: [],
+    description: '',
   },
   {
     id: 'pro',
     name: 'Pro',
-    description: 'Για αναπτυσσόμενες επιχειρήσεις',
     priceMonthly: 400,
-    features: ['EL+EN+DE', '3 AI Agents', '3 Αριθμοί', '800 λεπτά/μήνα', 'Priority υποστήριξη', 'Landing Page'],
+    features: [],
     popular: true,
+    description: '',
   },
   {
     id: 'enterprise',
     name: 'Enterprise',
-    description: 'Για μεγάλες επιχειρήσεις',
     priceMonthly: 999,
-    features: ['14+ γλώσσες', '10 AI Agents', '10 Αριθμοί', '2.000 λεπτά/μήνα', 'Agent Teams', 'SLA 99.9%'],
+    features: [],
+    description: '',
   },
 ];
 
-const DURATION_OPTIONS = [
-  { value: '1', label: '1 μήνας' },
-  { value: '3', label: '3 μήνες' },
-  { value: '6', label: '6 μήνες (-5%)' },
-  { value: '12', label: '12 μήνες (-15%)' },
-];
+const DURATION_VALUES = ['1', '3', '6', '12'] as const;
 
 interface BankDetails {
   bankName: string;
@@ -138,7 +133,7 @@ export default function RegisterPage() {
       const data = await res.json();
 
       if (!data.success) {
-        toast.error(data.error?.message || 'Σφάλμα κατά την υποβολή');
+        toast.error(data.error?.message || t.register.submitError);
         return;
       }
 
@@ -146,9 +141,9 @@ export default function RegisterPage() {
       setTotalPrice(data.data.totalPrice);
       setNextSteps(data.data.nextSteps || []);
       setStep('success');
-      toast.success('Η εγγραφή υποβλήθηκε επιτυχώς!');
+      toast.success(t.register.submitSuccess);
     } catch {
-      toast.error('Σφάλμα σύνδεσης με τον server');
+      toast.error(t.register.serverError);
     } finally {
       setIsLoading(false);
     }
@@ -164,10 +159,10 @@ export default function RegisterPage() {
 
   // ── Step Indicators ──
   const steps: { id: Step; label: string; icon: React.ReactNode }[] = [
-    { id: 'personal', label: 'Στοιχεία', icon: <User className="w-4 h-4" /> },
-    { id: 'business', label: 'Επιχείρηση', icon: <Building2 className="w-4 h-4" /> },
-    { id: 'plan', label: 'Πακέτο', icon: <CreditCard className="w-4 h-4" /> },
-    { id: 'confirm', label: 'Επιβεβαίωση', icon: <Check className="w-4 h-4" /> },
+    { id: 'personal', label: t.register.stepPersonal, icon: <User className="w-4 h-4" /> },
+    { id: 'business', label: t.register.stepBusiness, icon: <Building2 className="w-4 h-4" /> },
+    { id: 'plan', label: t.register.stepPlan, icon: <CreditCard className="w-4 h-4" /> },
+    { id: 'confirm', label: t.register.stepConfirm, icon: <Check className="w-4 h-4" /> },
   ];
 
   const stepOrder: Step[] = ['personal', 'business', 'plan', 'confirm'];
@@ -184,31 +179,31 @@ export default function RegisterPage() {
           <div className="w-16 h-16 bg-green-100 rounded-full mx-auto flex items-center justify-center mb-4">
             <CheckCircle2 className="w-8 h-8 text-green-600" />
           </div>
-          <h2 className="text-2xl font-bold text-text-primary">Η εγγραφή υποβλήθηκε!</h2>
+          <h2 className="text-2xl font-bold text-text-primary">{t.register.submitted}</h2>
           <p className="text-text-secondary mt-2">
-            Ολοκληρώστε την πληρωμή μέσω τραπεζικής κατάθεσης
+            {t.register.completePayment}
           </p>
         </div>
 
         {bankDetails && (
           <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-6 mb-6">
-            <h3 className="text-lg font-bold text-blue-900 mb-4">🏦 Στοιχεία Τραπεζικού Λογαριασμού</h3>
+            <h3 className="text-lg font-bold text-blue-900 mb-4">🏦 {t.register.bankDetails}</h3>
             <div className="space-y-3">
               <div>
-                <p className="text-xs text-blue-600 font-medium uppercase">Τράπεζα</p>
+                <p className="text-xs text-blue-600 font-medium uppercase">{t.register.bank}</p>
                 <p className="text-sm font-semibold text-blue-900">{bankDetails.bankName}</p>
               </div>
               <div>
                 <p className="text-xs text-blue-600 font-medium uppercase">IBAN</p>
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-mono font-bold text-blue-900 tracking-wider">{bankDetails.iban}</p>
-                  <button onClick={copyIban} className="p-1.5 rounded-lg hover:bg-blue-100 transition" title="Αντιγραφή IBAN">
+                  <button onClick={copyIban} className="p-1.5 rounded-lg hover:bg-blue-100 transition" title={t.register.copyIban}>
                     {copiedIban ? <CheckCircle2 className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4 text-blue-600" />}
                   </button>
                 </div>
               </div>
               <div>
-                <p className="text-xs text-blue-600 font-medium uppercase">Δικαιούχος</p>
+                <p className="text-xs text-blue-600 font-medium uppercase">{t.register.beneficiary}</p>
                 <p className="text-sm font-semibold text-blue-900">{bankDetails.beneficiary}</p>
               </div>
               <div>
@@ -216,7 +211,7 @@ export default function RegisterPage() {
                 <p className="text-sm font-mono text-blue-900">{bankDetails.swift}</p>
               </div>
               <div>
-                <p className="text-xs text-blue-600 font-medium uppercase">Ποσό Κατάθεσης</p>
+                <p className="text-xs text-blue-600 font-medium uppercase">{t.register.depositAmount}</p>
                 <p className="text-xl font-bold text-green-700">{totalPrice}</p>
               </div>
             </div>
@@ -228,7 +223,7 @@ export default function RegisterPage() {
 
         {nextSteps.length > 0 && (
           <div className="bg-white border border-border rounded-xl p-6 mb-6">
-            <h3 className="text-sm font-bold text-text-primary mb-3">Επόμενα Βήματα:</h3>
+            <h3 className="text-sm font-bold text-text-primary mb-3">{t.register.nextSteps}</h3>
             <ol className="space-y-2">
               {nextSteps.map((s, i) => (
                 <li key={i} className="flex items-start gap-3 text-sm">
@@ -250,7 +245,7 @@ export default function RegisterPage() {
             href="/activate"
             className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-brand-600 to-purple-600 text-white font-semibold rounded-lg hover:from-brand-700 hover:to-purple-700 transition"
           >
-            Έχω ήδη κλειδί → Ενεργοποίηση
+            {t.register.hasKeyActivate}
           </Link>
         </div>
       </div>
@@ -266,8 +261,8 @@ export default function RegisterPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-xl font-semibold text-text-primary">Εγγραφή Επιχείρησης</h2>
-          <p className="text-sm text-text-secondary mt-1">Δημιουργήστε τον λογαριασμό σας στο VoiceForge AI</p>
+          <h2 className="text-xl font-semibold text-text-primary">{t.register.title}</h2>
+          <p className="text-sm text-text-secondary mt-1">{t.register.subtitle}</p>
         </div>
         <LanguageToggle />
       </div>
@@ -301,27 +296,27 @@ export default function RegisterPage() {
       {step === 'personal' && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input label="Όνομα *" placeholder="π.χ. Πάνος" value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
-            <Input label="Επώνυμο *" placeholder="π.χ. Παπαδόπουλος" value={lastName} onChange={(e) => setLastName(e.target.value)} required />
+            <Input label={t.register.firstName} placeholder={t.register.firstNamePlaceholder} value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
+            <Input label={t.register.lastName} placeholder={t.register.lastNamePlaceholder} value={lastName} onChange={(e) => setLastName(e.target.value)} required />
           </div>
           <Input label="Email *" type="email" placeholder="info@company.gr" value={email} onChange={(e) => setEmail(e.target.value)} required />
-          <Input label="Τηλέφωνο *" type="tel" placeholder="+30 69xx xxx xxxx" value={phone} onChange={(e) => setPhone(e.target.value)} required />
-          <Input label="Κωδικός Πρόσβασης *" type="password" placeholder="Τουλάχιστον 8 χαρακτήρες" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} />
+          <Input label={t.register.phone} type="tel" placeholder="+30 69xx xxx xxxx" value={phone} onChange={(e) => setPhone(e.target.value)} required />
+          <Input label={t.register.password} type="password" placeholder={t.register.passwordHint} value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} />
           <Input
-            label="Επιβεβαίωση Κωδικού *"
+            label={t.register.confirmPassword}
             type="password"
-            placeholder="Επαναλάβετε τον κωδικό"
+            placeholder={t.register.confirmPasswordPlaceholder}
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             required
-            error={confirmPassword && password !== confirmPassword ? 'Οι κωδικοί δεν ταιριάζουν' : undefined}
+            error={confirmPassword && password !== confirmPassword ? t.register.passwordsMismatch : undefined}
           />
           <div className="flex justify-between pt-4">
             <Link href="/login" className="text-sm text-brand-600 hover:text-brand-700 font-medium flex items-center gap-1">
-              <ArrowLeft className="w-4 h-4" /> Σύνδεση
+              <ArrowLeft className="w-4 h-4" /> {t.common.login}
             </Link>
             <Button onClick={() => setStep('business')} disabled={!canProceedPersonal}>
-              Επόμενο <ArrowRight className="w-4 h-4 ml-1" />
+              {t.common.next} <ArrowRight className="w-4 h-4 ml-1" />
             </Button>
           </div>
         </div>
@@ -330,25 +325,25 @@ export default function RegisterPage() {
       {/* ── Step 2: Business Info ── */}
       {step === 'business' && (
         <div className="space-y-4">
-          <Input label="Επωνυμία Εταιρείας *" placeholder="π.χ. ABC Μονοπρόσωπη ΕΠΕ" value={companyName} onChange={(e) => setCompanyName(e.target.value)} required />
+          <Input label={t.register.companyName} placeholder={t.register.companyNamePlaceholder} value={companyName} onChange={(e) => setCompanyName(e.target.value)} required />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
-              label="ΑΦΜ *"
-              placeholder="9 ψηφία"
+              label={t.register.afm}
+              placeholder={t.register.afmHint}
               value={afm}
               onChange={(e) => setAfm(e.target.value.replace(/\D/g, '').slice(0, 9))}
               required
-              error={afm && !/^\d{9}$/.test(afm) ? 'Το ΑΦΜ πρέπει να είναι 9 ψηφία' : undefined}
+              error={afm && !/^\d{9}$/.test(afm) ? t.register.afmError : undefined}
             />
-            <Input label="ΔΟΥ *" placeholder="π.χ. Α' Αθηνών" value={doy} onChange={(e) => setDoy(e.target.value)} required />
+            <Input label={t.register.doy} placeholder={t.register.doyPlaceholder} value={doy} onChange={(e) => setDoy(e.target.value)} required />
           </div>
-          <Input label="Διεύθυνση Επιχείρησης *" placeholder="π.χ. Ερμού 10, Αθήνα 10563" value={businessAddress} onChange={(e) => setBusinessAddress(e.target.value)} required />
+          <Input label={t.register.businessAddress} placeholder={t.register.businessAddressPlaceholder} value={businessAddress} onChange={(e) => setBusinessAddress(e.target.value)} required />
           <div className="flex justify-between pt-4">
             <Button variant="ghost" onClick={() => setStep('personal')}>
-              <ArrowLeft className="w-4 h-4 mr-1" /> Πίσω
+              <ArrowLeft className="w-4 h-4 mr-1" /> {t.common.back}
             </Button>
             <Button onClick={() => setStep('plan')} disabled={!canProceedBusiness}>
-              Επόμενο <ArrowRight className="w-4 h-4 ml-1" />
+              {t.common.next} <ArrowRight className="w-4 h-4 ml-1" />
             </Button>
           </div>
         </div>
@@ -371,17 +366,17 @@ export default function RegisterPage() {
               >
                 {p.popular && (
                   <span className="absolute -top-2.5 left-4 px-2 py-0.5 text-xs font-bold bg-brand-600 text-white rounded-full">
-                    Δημοφιλές
+                    {t.register.popular}
                   </span>
                 )}
                 <h4 className="text-lg font-bold text-text-primary">{p.name}</h4>
-                <p className="text-xs text-text-secondary mb-3">{p.description}</p>
+                <p className="text-xs text-text-secondary mb-3">{(t.landing.plans as any)[p.id]?.description ?? ''}</p>
                 <p className="text-2xl font-bold text-text-primary mb-3">
                   {p.priceMonthly ? `€${p.priceMonthly}` : 'Custom'}
-                  {p.priceMonthly && <span className="text-sm font-normal text-text-secondary">/μήνα</span>}
+                  {p.priceMonthly && <span className="text-sm font-normal text-text-secondary">{t.register.perMonth}</span>}
                 </p>
                 <ul className="space-y-1.5">
-                  {p.features.map((f) => (
+                  {((t.landing.plans as any)[p.id]?.features ?? []).map((f: string) => (
                     <li key={f} className="flex items-center gap-2 text-xs text-text-secondary">
                       <Check className="w-3.5 h-3.5 text-green-500 shrink-0" />
                       {f}
@@ -394,38 +389,46 @@ export default function RegisterPage() {
 
           {/* Duration */}
           <div className="bg-white border border-border rounded-xl p-5">
-            <label className="block text-sm font-semibold text-text-primary mb-3">Διάρκεια Συνδρομής</label>
+            <label className="block text-sm font-semibold text-text-primary mb-3">{t.register.subscriptionDuration}</label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {DURATION_OPTIONS.map((opt) => (
+              {DURATION_VALUES.map((val) => {
+                const durationLabels: Record<string, string> = {
+                  '1': t.register.durationMonth1,
+                  '3': t.register.durationMonths3,
+                  '6': t.register.durationMonths6,
+                  '12': t.register.durationMonths12,
+                };
+                return (
                 <button
-                  key={opt.value}
-                  onClick={() => setDurationMonths(opt.value)}
+                  key={val}
+                  onClick={() => setDurationMonths(val)}
                   className={cn(
                     'px-3 py-2.5 text-sm font-medium rounded-lg border-2 transition',
-                    durationMonths === opt.value
+                    durationMonths === val
                       ? 'border-brand-500 bg-brand-50 text-brand-700'
                       : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300',
                   )}
                 >
-                  {opt.label}
+                  {durationLabels[val]}
                 </button>
-              ))}
+              );
+              })}
             </div>
 
             {plan?.priceMonthly && (
               <div className="mt-4 pt-4 border-t border-border">
                 <div className="flex justify-between text-sm text-text-secondary">
-                  <span>€{plan.priceMonthly}/μήνα × {duration} μήνες</span>
+                  <span>€{plan.priceMonthly}{t.register.perMonth} × {duration} {t.register.monthsLabel}</span>
                   <span>€{plan.priceMonthly * duration}</span>
                 </div>
                 {discount < 1 && (
                   <div className="flex justify-between text-sm text-green-600 mt-1">
-                    <span>Έκπτωση ({Math.round((1 - discount) * 100)}%)</span>
+                    <span>{t.register.discount} ({Math.round((1 - discount) * 100)}%)</span>
                     <span>-€{Math.round(plan.priceMonthly * duration * (1 - discount))}</span>
                   </div>
                 )}
                 <div className="flex justify-between mt-2 pt-2 border-t border-border">
-                  <span className="text-base font-bold text-text-primary">Σύνολο</span>
+                  <span className="text-base font-bold text-text-primary">{t.register.total}</span>
                   <span className="text-xl font-bold text-green-600">€{computedTotal}</span>
                 </div>
               </div>
@@ -434,10 +437,10 @@ export default function RegisterPage() {
 
           <div className="flex justify-between pt-2">
             <Button variant="ghost" onClick={() => setStep('business')}>
-              <ArrowLeft className="w-4 h-4 mr-1" /> Πίσω
+              <ArrowLeft className="w-4 h-4 mr-1" /> {t.common.back}
             </Button>
             <Button onClick={() => setStep('confirm')}>
-              Επιβεβαίωση <ArrowRight className="w-4 h-4 ml-1" />
+              {t.register.stepConfirm} <ArrowRight className="w-4 h-4 ml-1" />
             </Button>
           </div>
         </div>
@@ -447,33 +450,33 @@ export default function RegisterPage() {
       {step === 'confirm' && (
         <div className="space-y-6">
           <div className="bg-white border border-border rounded-xl p-6">
-            <h3 className="text-lg font-bold text-text-primary mb-4">Σύνοψη Εγγραφής</h3>
+            <h3 className="text-lg font-bold text-text-primary mb-4">{t.register.summary}</h3>
             <div className="space-y-4">
               <div>
-                <p className="text-xs text-text-secondary font-medium uppercase mb-2">Προσωπικά Στοιχεία</p>
+                <p className="text-xs text-text-secondary font-medium uppercase mb-2">{t.register.personalInfo}</p>
                 <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div><span className="text-gray-400">Όνομα:</span> <span className="font-medium">{firstName} {lastName}</span></div>
+                  <div><span className="text-gray-400">{t.register.name}:</span> <span className="font-medium">{firstName} {lastName}</span></div>
                   <div><span className="text-gray-400">Email:</span> <span className="font-medium">{email}</span></div>
-                  <div><span className="text-gray-400">Τηλέφωνο:</span> <span className="font-medium">{phone}</span></div>
+                  <div><span className="text-gray-400">{t.register.phone}:</span> <span className="font-medium">{phone}</span></div>
                 </div>
               </div>
               <div className="border-t border-border pt-4">
-                <p className="text-xs text-text-secondary font-medium uppercase mb-2">Στοιχεία Επιχείρησης</p>
+                <p className="text-xs text-text-secondary font-medium uppercase mb-2">{t.register.businessInfo}</p>
                 <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div><span className="text-gray-400">Επωνυμία:</span> <span className="font-medium">{companyName}</span></div>
-                  <div><span className="text-gray-400">ΑΦΜ:</span> <span className="font-medium">{afm}</span></div>
-                  <div><span className="text-gray-400">ΔΟΥ:</span> <span className="font-medium">{doy}</span></div>
-                  <div><span className="text-gray-400">Διεύθυνση:</span> <span className="font-medium">{businessAddress}</span></div>
+                  <div><span className="text-gray-400">{t.register.companyLabel}:</span> <span className="font-medium">{companyName}</span></div>
+                  <div><span className="text-gray-400">{t.register.afmLabel}:</span> <span className="font-medium">{afm}</span></div>
+                  <div><span className="text-gray-400">{t.register.doyLabel}:</span> <span className="font-medium">{doy}</span></div>
+                  <div><span className="text-gray-400">{t.register.addressLabel}:</span> <span className="font-medium">{businessAddress}</span></div>
                 </div>
               </div>
               <div className="border-t border-border pt-4">
-                <p className="text-xs text-text-secondary font-medium uppercase mb-2">Πακέτο & Πληρωμή</p>
+                <p className="text-xs text-text-secondary font-medium uppercase mb-2">{t.register.planAndPayment}</p>
                 <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div><span className="text-gray-400">Πακέτο:</span> <span className="font-medium text-brand-600">{plan?.name}</span></div>
-                  <div><span className="text-gray-400">Διάρκεια:</span> <span className="font-medium">{duration} μήνες</span></div>
+                  <div><span className="text-gray-400">{t.register.planLabel}:</span> <span className="font-medium text-brand-600">{plan?.name}</span></div>
+                  <div><span className="text-gray-400">{t.register.durationLabel}:</span> <span className="font-medium">{duration} {t.register.monthsLabel}</span></div>
                   {plan?.priceMonthly && (
                     <div className="col-span-2">
-                      <span className="text-gray-400">Σύνολο:</span>{' '}
+                      <span className="text-gray-400">{t.register.totalLabel}:</span>{' '}
                       <span className="text-lg font-bold text-green-600">€{computedTotal}</span>
                     </div>
                   )}
@@ -484,21 +487,20 @@ export default function RegisterPage() {
 
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
             <p className="text-sm text-amber-800">
-              <strong>💳 Πληρωμή:</strong> Μετά την υποβολή θα δείτε τα στοιχεία τραπεζικού λογαριασμού
-              για κατάθεση. Μόλις επιβεβαιωθεί η πληρωμή, θα λάβετε email με το κλειδί ενεργοποίησης.
+              <strong>💳 {t.register.paymentLabel}:</strong> {t.register.bankTransfer}
             </p>
           </div>
 
           <div className="flex justify-between pt-2">
             <Button variant="ghost" onClick={() => setStep('plan')}>
-              <ArrowLeft className="w-4 h-4 mr-1" /> Πίσω
+              <ArrowLeft className="w-4 h-4 mr-1" /> {t.common.back}
             </Button>
             <Button
               onClick={handleSubmit}
               isLoading={isLoading}
               className="bg-gradient-to-r from-brand-600 to-purple-600 hover:from-brand-700 hover:to-purple-700"
             >
-              Υποβολή Εγγραφής
+              {t.register.submitRegistration}
             </Button>
           </div>
         </div>
@@ -507,15 +509,15 @@ export default function RegisterPage() {
       {/* Links */}
       <div className="mt-8 pt-6 border-t border-border text-center space-y-2">
         <p className="text-sm text-text-secondary">
-          Έχετε ήδη λογαριασμό;{' '}
+                    {t.register.hasAccount}{' '}
           <Link href="/login" className="text-brand-600 hover:text-brand-700 font-medium">
-            Σύνδεση
+            {t.common.login}
           </Link>
         </p>
         <p className="text-sm text-text-secondary">
-          Έχετε κλειδί ενεργοποίησης;{' '}
+          {t.register.hasKey}{' '}
           <Link href="/activate" className="text-brand-600 hover:text-brand-700 font-medium">
-            Ενεργοποίηση
+            {t.register.activate}
           </Link>
         </p>
       </div>

@@ -7,6 +7,7 @@
 import type { FormEvent } from 'react';
 import { Button, Input, Select } from '@/components/ui';
 import { INDUSTRY_LABELS } from '@/lib/utils';
+import { useI18n } from '@/lib/i18n';
 import type { OnboardingData } from './page';
 
 interface StepBusinessProps {
@@ -21,6 +22,7 @@ const industryOptions = Object.entries(INDUSTRY_LABELS).map(([value, label]) => 
 }));
 
 export function StepBusiness({ data, updateData, onNext }: StepBusinessProps) {
+  const { t } = useI18n();
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     onNext();
@@ -30,23 +32,23 @@ export function StepBusiness({ data, updateData, onNext }: StepBusinessProps) {
 
   return (
     <div className="bg-surface border border-border rounded-xl shadow-card p-8">
-      <h2 className="text-xl font-semibold text-text-primary mb-2">Στοιχεία Επιχείρησης</h2>
+      <h2 className="text-xl font-semibold text-text-primary mb-2">{t.onboarding.businessTitle}</h2>
       <p className="text-sm text-text-secondary mb-6">
-        Πείτε μας για την επιχείρησή σας ώστε να ρυθμίσουμε τον AI βοηθό σας.
+        {t.onboarding.businessSubtitle}
       </p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <Input
-          label="Επωνυμία Επιχείρησης"
-          placeholder="π.χ. Δικηγορικό Γραφείο Παπαδόπουλος"
+          label={t.onboarding.businessNameLabel}
+          placeholder={t.onboarding.businessNamePlaceholder}
           value={data.businessName}
           onChange={(e) => updateData({ businessName: e.target.value })}
           required
         />
 
         <Select
-          label="Κλάδος"
-          placeholder="Επιλέξτε κλάδο..."
+          label={t.onboarding.industryLabel}
+          placeholder={t.onboarding.industryPlaceholder}
           options={industryOptions}
           value={data.industry}
           onChange={(e) => updateData({ industry: e.target.value as OnboardingData['industry'] })}
@@ -54,8 +56,8 @@ export function StepBusiness({ data, updateData, onNext }: StepBusinessProps) {
         />
 
         <Input
-          label="Ονοματεπώνυμο Ιδιοκτήτη"
-          placeholder="π.χ. Γιάννης Παπαδόπουλος"
+          label={t.onboarding.ownerNameLabel}
+          placeholder={t.onboarding.ownerNamePlaceholder}
           value={data.ownerName}
           onChange={(e) => updateData({ ownerName: e.target.value })}
           required
@@ -71,7 +73,7 @@ export function StepBusiness({ data, updateData, onNext }: StepBusinessProps) {
             required
           />
           <Input
-            label="Τηλέφωνο"
+            label={t.onboarding.phoneLabel}
             type="tel"
             placeholder="+30 210 1234567"
             value={data.phone}
@@ -81,10 +83,10 @@ export function StepBusiness({ data, updateData, onNext }: StepBusinessProps) {
         </div>
 
         <Select
-          label="Ζώνη Ώρας"
+          label={t.onboarding.timezoneLabel}
           options={[
-            { value: 'Europe/Athens', label: 'Ελλάδα (Europe/Athens)' },
-            { value: 'Europe/Nicosia', label: 'Κύπρος (Europe/Nicosia)' },
+            { value: 'Europe/Athens', label: t.onboarding.timezoneGreece },
+            { value: 'Europe/Nicosia', label: t.onboarding.timezoneCyprus },
           ]}
           value={data.timezone}
           onChange={(e) => updateData({ timezone: e.target.value })}
@@ -92,7 +94,7 @@ export function StepBusiness({ data, updateData, onNext }: StepBusinessProps) {
 
         <div className="flex justify-end pt-4">
           <Button type="submit" disabled={!isValid}>
-            Επόμενο
+            {t.common.next}
           </Button>
         </div>
       </form>

@@ -8,6 +8,7 @@
 import { useState, useCallback } from 'react';
 import { Button, Input } from '@/components/ui';
 import { Spinner } from '@/components/ui';
+import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { Phone, Search, MapPin } from 'lucide-react';
 import { api } from '@/lib/api-client';
@@ -32,6 +33,7 @@ interface AvailableNumber {
 }
 
 export function StepNumber({ data, updateData, onNext, onBack }: StepNumberProps) {
+  const { t } = useI18n();
   const [numbers, setNumbers] = useState<AvailableNumber[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
@@ -51,11 +53,11 @@ export function StepNumber({ data, updateData, onNext, onBack }: StepNumberProps
       if (result.success && result.data) {
         setNumbers(result.data);
         if (result.data.length === 0) {
-          toast.info('Δεν βρέθηκαν διαθέσιμοι αριθμοί. Δοκιμάστε διαφορετική περιοχή.');
+          toast.info(t.onboarding.numberNoResults);
         }
       }
     } catch {
-      toast.error('Σφάλμα αναζήτησης αριθμών');
+      toast.error(t.onboarding.numberSearchError);
     } finally {
       setIsSearching(false);
     }
@@ -71,23 +73,23 @@ export function StepNumber({ data, updateData, onNext, onBack }: StepNumberProps
 
   return (
     <div className="bg-surface border border-border rounded-xl shadow-card p-8">
-      <h2 className="text-xl font-semibold text-text-primary mb-2">Επιλέξτε Τηλεφωνικό Αριθμό</h2>
+      <h2 className="text-xl font-semibold text-text-primary mb-2">{t.onboarding.numberTitle}</h2>
       <p className="text-sm text-text-secondary mb-6">
-        Αναζητήστε διαθέσιμους ελληνικούς αριθμούς (+30) για τον AI βοηθό σας.
+        {t.onboarding.numberSubtitle}
       </p>
 
       {/* Search Controls */}
       <div className="flex gap-3 mb-6">
         <div className="flex-1">
           <Input
-            placeholder="Περιοχή (π.χ. Αθήνα, Θεσσαλονίκη)"
+            placeholder={t.onboarding.numberSearch}
             value={locality}
             onChange={(e) => setLocality(e.target.value)}
             className="h-11"
           />
         </div>
         <Button onClick={searchNumbers} isLoading={isSearching} leftIcon={<Search className="w-4 h-4" />}>
-          Αναζήτηση
+          {t.onboarding.numberSearchBtn}
         </Button>
       </div>
 
@@ -95,15 +97,15 @@ export function StepNumber({ data, updateData, onNext, onBack }: StepNumberProps
       {isSearching && (
         <div className="flex items-center justify-center py-12">
           <Spinner size="lg" />
-          <span className="ml-3 text-text-secondary">Αναζήτηση αριθμών...</span>
+          <span className="ml-3 text-text-secondary">{t.onboarding.numberSearching}</span>
         </div>
       )}
 
       {!isSearching && hasSearched && numbers.length === 0 && (
         <div className="text-center py-12">
           <Phone className="w-10 h-10 text-text-tertiary mx-auto mb-3" />
-          <p className="text-text-secondary">Δεν βρέθηκαν διαθέσιμοι αριθμοί</p>
-          <p className="text-sm text-text-tertiary mt-1">Δοκιμάστε διαφορετική περιοχή</p>
+          <p className="text-text-secondary">{t.onboarding.numberNoResults}</p>
+          <p className="text-sm text-text-tertiary mt-1">{t.onboarding.numberTryDifferent}</p>
         </div>
       )}
 
@@ -139,7 +141,7 @@ export function StepNumber({ data, updateData, onNext, onBack }: StepNumberProps
                 </div>
               </div>
               <div className="text-right shrink-0">
-                <p className="text-sm font-medium text-text-primary">{num.monthlyCost} {num.currency}/μήνα</p>
+                <p className="text-sm font-medium text-text-primary">{num.monthlyCost} {num.currency}{t.onboarding.numberPerMonth}</p>
               </div>
             </button>
           ))}
@@ -149,16 +151,16 @@ export function StepNumber({ data, updateData, onNext, onBack }: StepNumberProps
       {/* Skip option */}
       {!data.selectedNumber && (
         <p className="text-xs text-text-tertiary text-center mt-4">
-          Μπορείτε να παραλείψετε αυτό το βήμα και να προσθέσετε αριθμό αργότερα.
+          {t.onboarding.numberSkipNote}
         </p>
       )}
 
       <div className="flex justify-between pt-6">
         <Button variant="outline" onClick={onBack}>
-          Πίσω
+          {t.common.back}
         </Button>
         <Button onClick={onNext}>
-          {data.selectedNumber ? 'Επόμενο' : 'Παράλειψη'}
+          {data.selectedNumber ? t.common.next : t.common.skip}
         </Button>
       </div>
     </div>

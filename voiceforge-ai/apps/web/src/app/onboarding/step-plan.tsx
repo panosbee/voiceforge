@@ -8,6 +8,7 @@ import { Button } from '@/components/ui';
 import { PLAN_LABELS } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import { Check } from 'lucide-react';
+import { useI18n } from '@/lib/i18n';
 import type { Plan } from '@voiceforge/shared';
 import type { OnboardingData } from './page';
 
@@ -18,52 +19,22 @@ interface StepPlanProps {
   onBack: () => void;
 }
 
-const PLAN_FEATURES: Record<Plan, string[]> = {
-  basic: [
-    '400 λεπτά κλήσεων / μήνα',
-    '1 AI βοηθός',
-    '1 τηλεφωνικός αριθμός',
-    'Ελληνική γλώσσα',
-    'Διαχείριση ραντεβού',
-    'SMS επιβεβαίωσης',
-    'Email υποστήριξη',
-  ],
-  pro: [
-    '800 λεπτά κλήσεων / μήνα',
-    '3 AI βοηθοί',
-    '3 τηλεφωνικοί αριθμοί',
-    'Ελληνικά, Αγγλικά & Γερμανικά',
-    'Priority υποστήριξη',
-    'Αναλυτικά analytics & insights',
-    'Ετήσια: Landing Page + 3 αναθεωρήσεις',
-  ],
-  enterprise: [
-    '2000 λεπτά κλήσεων / μήνα',
-    '10 AI βοηθοί',
-    '10 τηλεφωνικοί αριθμοί',
-    '14+ γλώσσες',
-    'Ομάδες βοηθών (Agent Teams)',
-    'Αναγνώριση πελατών',
-    'Rollover λεπτών',
-    'Dedicated υποστήριξη 24/7',
-    'SLA 99.9% uptime',
-  ],
-};
-
 export function StepPlan({ data, updateData, onNext, onBack }: StepPlanProps) {
+  const { t } = useI18n();
+
   return (
     <div>
       <div className="text-center mb-8">
-        <h2 className="text-xl font-semibold text-text-primary mb-2">Επιλέξτε Πακέτο</h2>
+        <h2 className="text-xl font-semibold text-text-primary mb-2">{t.onboarding.planTitle}</h2>
         <p className="text-sm text-text-secondary">
-          Μπορείτε να αναβαθμίσετε ή υποβαθμίσετε ανά πάσα στιγμή.
+          {t.onboarding.planSubtitle}
         </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         {(Object.keys(PLAN_LABELS) as Plan[]).map((planKey) => {
           const plan = PLAN_LABELS[planKey]!;
-          const features = PLAN_FEATURES[planKey]!;
+          const features = ((t.landing.plans as any)[planKey]?.features ?? []) as string[];
           const isSelected = data.plan === planKey;
           const isPopular = planKey === 'pro';
 
@@ -81,7 +52,7 @@ export function StepPlan({ data, updateData, onNext, onBack }: StepPlanProps) {
             >
               {isPopular && (
                 <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 bg-brand-600 text-white text-xs font-medium rounded-full">
-                  Δημοφιλές
+                  {t.common.popular}
                 </span>
               )}
 
@@ -89,7 +60,7 @@ export function StepPlan({ data, updateData, onNext, onBack }: StepPlanProps) {
                 <h3 className="text-lg font-semibold text-text-primary">{plan.name}</h3>
                 <div className="flex items-baseline gap-1 mt-2">
                   <span className="text-3xl font-bold text-text-primary">{plan.price}</span>
-                  <span className="text-sm text-text-secondary">/μήνα</span>
+                  <span className="text-sm text-text-secondary">{t.common.perMonth}</span>
                 </div>
               </div>
 
@@ -116,9 +87,9 @@ export function StepPlan({ data, updateData, onNext, onBack }: StepPlanProps) {
 
       <div className="flex justify-between">
         <Button variant="outline" onClick={onBack}>
-          Πίσω
+          {t.common.back}
         </Button>
-        <Button onClick={onNext}>Επόμενο</Button>
+        <Button onClick={onNext}>{t.common.next}</Button>
       </div>
     </div>
   );

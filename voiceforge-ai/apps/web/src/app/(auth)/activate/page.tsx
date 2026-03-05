@@ -38,7 +38,7 @@ export default function ActivatePage() {
 
   const handleActivate = async () => {
     if (!licenseKey.trim()) {
-      toast.error('Εισάγετε το κλειδί ενεργοποίησης');
+      toast.error(t.activate.enterKey);
       return;
     }
 
@@ -53,7 +53,7 @@ export default function ActivatePage() {
       const data = await res.json();
 
       if (!data.success) {
-        toast.error(data.error?.message || 'Σφάλμα ενεργοποίησης');
+        toast.error(data.error?.message || t.activate.activationError);
         return;
       }
 
@@ -64,9 +64,9 @@ export default function ActivatePage() {
 
       setActivationData(data.data.license);
       setIsActivated(true);
-      toast.success('Ο λογαριασμός σας ενεργοποιήθηκε!');
+      toast.success(t.activate.successTitle);
     } catch {
-      toast.error('Σφάλμα σύνδεσης με τον server');
+      toast.error(t.activate.serverError);
     } finally {
       setIsLoading(false);
     }
@@ -91,25 +91,25 @@ export default function ActivatePage() {
         <div className="w-16 h-16 bg-green-100 rounded-full mx-auto flex items-center justify-center mb-4">
           <CheckCircle2 className="w-8 h-8 text-green-600" />
         </div>
-        <h2 className="text-2xl font-bold text-text-primary mb-2">Ενεργοποίηση Επιτυχής!</h2>
+        <h2 className="text-2xl font-bold text-text-primary mb-2">{t.activate.successTitle}</h2>
         <p className="text-text-secondary mb-6">
-          Ο λογαριασμός σας είναι τώρα ενεργός. Καλώς ήρθατε στο VoiceForge AI!
+          {t.activate.successMessage}
         </p>
 
         <div className="bg-surface border border-border rounded-xl p-5 mb-6 text-left">
           <div className="space-y-3">
             <div className="flex justify-between text-sm">
-              <span className="text-text-secondary">Πακέτο</span>
+              <span className="text-text-secondary">{t.activate.plan}</span>
               <span className="font-semibold text-brand-600">
                 {planLabels[activationData.plan] || activationData.plan}
               </span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-text-secondary">Διάρκεια</span>
-              <span className="font-medium">{activationData.durationMonths} μήνες</span>
+              <span className="text-text-secondary">{t.admin.duration}</span>
+              <span className="font-medium">{activationData.durationMonths} {t.register.monthsLabel}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-text-secondary">Ισχύει μέχρι</span>
+              <span className="text-text-secondary">{t.activate.expiresAt}</span>
               <span className="font-semibold text-green-600">{formattedExpiry}</span>
             </div>
           </div>
@@ -119,7 +119,7 @@ export default function ActivatePage() {
           onClick={() => router.push('/dashboard')}
           className="w-full bg-gradient-to-r from-brand-600 to-purple-600 hover:from-brand-700 hover:to-purple-700"
         >
-          Μετάβαση στο Dashboard <ArrowRight className="w-4 h-4 ml-2" />
+          {t.activate.goToDashboard} <ArrowRight className="w-4 h-4 ml-2" />
         </Button>
       </div>
     );
@@ -130,9 +130,9 @@ export default function ActivatePage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-xl font-semibold text-text-primary">Ενεργοποίηση Λογαριασμού</h2>
+          <h2 className="text-xl font-semibold text-text-primary">{t.activate.title}</h2>
           <p className="text-sm text-text-secondary mt-1">
-            Εισάγετε το κλειδί που λάβατε μέσω email
+            {t.activate.emailReceived}
           </p>
         </div>
         <LanguageToggle />
@@ -142,12 +142,11 @@ export default function ActivatePage() {
         <div className="flex items-start gap-3">
           <KeyRound className="w-5 h-5 text-brand-600 shrink-0 mt-0.5" />
           <div className="text-sm text-brand-800">
-            <p className="font-medium mb-1">Πώς λειτουργεί;</p>
+            <p className="font-medium mb-1">{t.activate.enterKey}</p>
             <ol className="list-decimal list-inside space-y-1 text-brand-700">
-              <li>Εγγραφείτε και πληρώστε μέσω τραπεζικής κατάθεσης</li>
-              <li>Ο διαχειριστής επιβεβαιώνει την πληρωμή</li>
-              <li>Λαμβάνετε κλειδί ενεργοποίησης στο email σας</li>
-              <li>Εισάγετε το κλειδί εδώ και ξεκινάτε!</li>
+              {t.register.nextStepsItems.map((item, i) => (
+                <li key={i}>{item}</li>
+              ))}
             </ol>
           </div>
         </div>
@@ -156,7 +155,7 @@ export default function ActivatePage() {
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-text-primary mb-1.5">
-            Κλειδί Ενεργοποίησης
+            {t.activate.keyLabel}
           </label>
           <input
             type="text"
@@ -175,21 +174,21 @@ export default function ActivatePage() {
           disabled={licenseKey.length < 10}
           className="w-full"
         >
-          Ενεργοποίηση
+          {t.activate.activateBtn}
         </Button>
       </div>
 
       <div className="mt-8 pt-6 border-t border-border text-center space-y-2">
         <p className="text-sm text-text-secondary">
-          Δεν έχετε λογαριασμό;{' '}
+                    {t.activate.noAccount}{' '}
           <Link href="/register" className="text-brand-600 hover:text-brand-700 font-medium">
-            Εγγραφή
+            {t.activate.register}
           </Link>
         </p>
         <p className="text-sm text-text-secondary">
-          Έχετε ήδη λογαριασμό;{' '}
+          {t.activate.hasAccount}{' '}
           <Link href="/login" className="text-brand-600 hover:text-brand-700 font-medium">
-            Σύνδεση
+            {t.activate.login}
           </Link>
         </p>
       </div>
