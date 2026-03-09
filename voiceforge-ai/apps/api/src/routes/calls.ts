@@ -6,7 +6,7 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { eq, and, gte, lte, desc, sql, count } from 'drizzle-orm';
+import { eq, and, gte, lte, desc, sql, count, inArray } from 'drizzle-orm';
 import { db } from '../db/connection.js';
 import { customers, calls, agents, appointments } from '../db/schema/index.js';
 import { authMiddleware, type AuthUser } from '../middleware/auth.js';
@@ -461,9 +461,11 @@ callRoutes.delete('/e2e-test/:id', async (c) => {
     return c.json<ApiResponse>({ success: false, error: { code: 'FORBIDDEN', message: 'Only test calls can be deleted' } }, 403);
   }
 
+  // Delete appointments linked to this test call first
+  await db.delete(appointments).where(eq(appointments.callId, callId));
   await db.delete(calls).where(eq(calls.id, callId));
 
-  log.info({ callId }, '🗑️ E2E test call deleted');
+  log.info({ callId }, '🗑️ E2E test call + appointments deleted');
 
   return c.json<ApiResponse>({ success: true, data: { deleted: true } });
 });
@@ -484,6 +486,25 @@ callRoutes.delete('/e2e-test', async (c) => {
     return c.json<ApiResponse>({ success: false, error: { code: 'NOT_FOUND', message: 'Customer not found' } }, 404);
   }
 
+  // Find all E2E test call IDs first
+  const testCalls = await db
+    .select({ id: calls.id })
+    .from(calls)
+    .where(
+      and(
+        eq(calls.customerId, customer.id),
+        sql`${calls.metadata}->>'isE2ETest' = 'true'`,
+      ),
+    );
+
+  const testCallIds = testCalls.map(c => c.id);
+
+  // Delete appointments linked to test calls
+  if (testCallIds.length > 0) {
+    await db.delete(appointments).where(inArray(appointments.callId, testCallIds));
+  }
+
+  // Delete the test calls
   const result = await db
     .delete(calls)
     .where(
@@ -494,7 +515,7 @@ callRoutes.delete('/e2e-test', async (c) => {
     )
     .returning({ id: calls.id });
 
-  log.info({ count: result.length, customerId: customer.id }, '🗑️ All E2E test calls deleted');
+  log.info({ count: result.length, customerId: customer.id }, '🗑️ All E2E test calls + appointments deleted');
 
   return c.json<ApiResponse>({ success: true, data: { deletedCount: result.length } });
 });

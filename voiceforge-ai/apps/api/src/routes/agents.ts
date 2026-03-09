@@ -255,7 +255,7 @@ agentRoutes.post('/', zValidator('json', createAgentSchema), async (c) => {
   const webhookTools = [
     {
       name: 'check_availability',
-      description: 'Ελέγχει διαθέσιμα ραντεβού στο ημερολόγιο του γραφείου',
+      description: 'Ελέγχει τα διαθέσιμα ραντεβού στο ημερολόγιο. ΠΑΝΤΑ κάλεσε αυτό το εργαλείο ΠΡΙΝ κλείσεις ραντεβού ώστε να δεις ποια slots είναι ελεύθερα. Επιστρέφει λίστα διαθέσιμων ωρών και κατειλημμένων slots για τη ζητούμενη ημερομηνία.',
       url: serverToolUrl,
       method: 'POST',
       parameters: {
@@ -269,7 +269,7 @@ agentRoutes.post('/', zValidator('json', createAgentSchema), async (c) => {
     },
     {
       name: 'book_appointment',
-      description: 'Κλείνει ραντεβού στο ημερολόγιο',
+      description: 'Κλείνει ραντεβού στο ημερολόγιο. Πρώτα ΠΑΝΤΑ κάλεσε check_availability. Αν η ώρα είναι πιασμένη, θα λάβεις slot_taken=true και την πιο κοντινή διαθέσιμη ώρα — πρότεινέ τη στον πελάτη.',
       url: serverToolUrl,
       method: 'POST',
       parameters: {

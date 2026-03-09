@@ -183,5 +183,35 @@ export function buildEnhancedInstructions(params: BuildEnhancedInstructionsParam
         'Learn and remember important details: name, preferences, service interests, allergies/special needs.\n',
       ].join('\n');
 
-  return languagePrefix + rawInstructions + safetyInstructions + callManagement + dateTimeInjection + languageInstructions + memoryInstructions;
+  const calendarInstructions = customerLocale === 'el'
+    ? [
+        '\n[ΔΙΑΧΕΙΡΙΣΗ ΗΜΕΡΟΛΟΓΙΟΥ / SLOT MANAGEMENT]',
+        'Έχεις πρόσβαση σε δύο εργαλεία ημερολογίου:',
+        '1. "check_availability" — Ελέγχει ποια ραντεβού είναι διαθέσιμα σε μια ημερομηνία.',
+        '2. "book_appointment" — Κλείνει ραντεβού σε συγκεκριμένη ημερομηνία και ώρα.',
+        '',
+        'ΚΡΙΣΙΜΟΙ ΚΑΝΟΝΕΣ:',
+        '- ΠΑΝΤΑ κάλεσε "check_availability" ΠΡΙΝ προτείνεις ή κλείσεις ραντεβού. Ποτέ μην κλείνεις ραντεβού χωρίς να ελέγξεις πρώτα τη διαθεσιμότητα.',
+        '- Αν ο πελάτης ζητήσει συγκεκριμένη ώρα, έλεγξε αν είναι διαθέσιμη. Αν ΟΧΙ, πρότεινε την πιο κοντινή διαθέσιμη ώρα.',
+        '- Αν κλείσεις ραντεβού και πάρεις απάντηση slot_taken=true, ενημέρωσε τον πελάτη ότι η ώρα είναι πιασμένη και πρότεινε την εναλλακτική ώρα που σου δόθηκε.',
+        '- Ώρες λειτουργίας: 09:00-17:00, Δευτέρα-Παρασκευή. Slots κάθε 30 λεπτά. Μεσημεριανό διάλειμμα 12:30-14:00.',
+        '- Πες στον πελάτη τις διαθέσιμες ώρες με φυσικό τρόπο, π.χ. "Βλέπω ότι στις 12 Μαρτίου έχουμε διαθέσιμο στις 10:00, 11:00 και 15:00. Ποια σας βολεύει;"',
+        '- Μόλις ο πελάτης επιλέξει, κλείσε αμέσως με "book_appointment".\n',
+      ].join('\n')
+    : [
+        '\n[CALENDAR MANAGEMENT / SLOT MANAGEMENT]',
+        'You have access to two calendar tools:',
+        '1. "check_availability" — Checks which appointment slots are available on a given date.',
+        '2. "book_appointment" — Books an appointment at a specific date and time.',
+        '',
+        'CRITICAL RULES:',
+        '- ALWAYS call "check_availability" BEFORE suggesting or booking any appointment. Never book without checking first.',
+        '- If the customer requests a specific time, check if it\'s available. If NOT, suggest the nearest available slot.',
+        '- If you attempt to book and get slot_taken=true, inform the customer the slot is taken and suggest the alternative time provided.',
+        '- Business hours: 09:00-17:00, Monday-Friday. Slots every 30 minutes. Lunch break 12:30-14:00.',
+        '- Present available times naturally, e.g. "I can see that on March 12 we have openings at 10:00, 11:00, and 15:00. Which works best for you?"',
+        '- Once the customer chooses, book immediately with "book_appointment".\n',
+      ].join('\n');
+
+  return languagePrefix + rawInstructions + safetyInstructions + callManagement + dateTimeInjection + languageInstructions + memoryInstructions + calendarInstructions;
 }

@@ -504,25 +504,34 @@ elevenlabsWebhookRoutes.post('/server-tool', async (c) => {
         const requestedDate = parameters?.requested_date as string;
 
         if (agentRecord) {
-          const existingApts = await db.query.appointments.findMany({
-            where: eq(appointments.agentId, agentRecord.id),
-          });
-
           // Compare dates in customer's timezone
           const { getDayRangeInTimezone, formatTimeInTimezone } = await import('../services/timezone.js');
           const { startDate: dayStart, endDate: dayEnd } = getDayRangeInTimezone(requestedDate, customerTz);
 
+          const existingApts = await db.query.appointments.findMany({
+            where: and(
+              eq(appointments.customerId, agentRecord.customerId),
+              gte(appointments.scheduledAt, dayStart),
+              lte(appointments.scheduledAt, dayEnd),
+            ),
+          });
+
           const busyTimes = existingApts
-            .filter((a) => a.scheduledAt >= dayStart && a.scheduledAt <= dayEnd)
+            .filter((a) => a.status !== 'cancelled')
             .map((a) => formatTimeInTimezone(new Date(a.scheduledAt), customerTz));
 
           const allSlots = ['09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '12:00', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00'];
           const available = allSlots.filter((t) => !busyTimes.includes(t));
 
           return c.json({
+            date: requestedDate,
+            total_slots: allSlots.length,
+            booked_count: busyTimes.length,
+            available_count: available.length,
             available_slots: available.map((time) => ({
               date: requestedDate, time, available: true,
             })),
+            booked_slots: busyTimes,
           });
         }
 
@@ -541,23 +550,81 @@ elevenlabsWebhookRoutes.post('/server-tool', async (c) => {
         const time = parameters?.time as string;
         const callerName = parameters?.caller_name as string;
         const callerPhone = parameters?.caller_phone as string;
+        const serviceType = parameters?.service_type as string | undefined;
+        const notes = parameters?.notes as string | undefined;
 
         log.info({ date, time, callerName, callerPhone }, 'Booking appointment via ElevenLabs tool');
 
         if (agentRecord && date && time) {
-          // Parse in customer timezone → UTC for storage
-          const { parseDateTimeInTimezone: parseDT } = await import('../services/timezone.js');
+          const { parseDateTimeInTimezone: parseDT, getDayRangeInTimezone, formatTimeInTimezone } = await import('../services/timezone.js');
           const scheduledAt = parseDT(date, time, customerTz);
 
+          if (isNaN(scheduledAt.getTime())) {
+            return c.json({
+              success: false,
+              message: 'Η ημερομηνία ή η ώρα δεν είναι έγκυρη. Χρησιμοποίησε μορφή YYYY-MM-DD και HH:MM.',
+            });
+          }
+
+          // ── Slot conflict check ─────────────────────────────────
+          const { startDate: dayStart, endDate: dayEnd } = getDayRangeInTimezone(date, customerTz);
+          const existingApts = await db.query.appointments.findMany({
+            where: and(
+              eq(appointments.customerId, agentRecord.customerId),
+              gte(appointments.scheduledAt, dayStart),
+              lte(appointments.scheduledAt, dayEnd),
+            ),
+          });
+
+          // Check if requested slot is taken (same hour:minute)
+          const busyTimes = existingApts
+            .filter(a => a.status !== 'cancelled')
+            .map(a => formatTimeInTimezone(new Date(a.scheduledAt), customerTz));
+
+          if (busyTimes.includes(time)) {
+            // Find nearest available slot
+            const allSlots = ['09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '12:00', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00'];
+            const freeSlots = allSlots.filter(t => !busyTimes.includes(t));
+
+            // Find closest free slot to the requested time
+            let nearestSlot: string | null = null;
+            if (freeSlots.length > 0) {
+              const toMinutes = (t: string) => {
+                const [h, m] = t.split(':');
+                return parseInt(h ?? '0', 10) * 60 + parseInt(m ?? '0', 10);
+              };
+              const reqMinutes = toMinutes(time);
+              nearestSlot = freeSlots.reduce((closest, slot) =>
+                Math.abs(toMinutes(slot) - reqMinutes) < Math.abs(toMinutes(closest) - reqMinutes) ? slot : closest
+              );
+            }
+
+            return c.json({
+              success: false,
+              slot_taken: true,
+              requested_time: time,
+              message: nearestSlot
+                ? `Η ώρα ${time} είναι ήδη κρατημένη. Η πιο κοντινή διαθέσιμη ώρα είναι ${nearestSlot}. Θέλει ο πελάτης να κλείσει στις ${nearestSlot};`
+                : `Η ώρα ${time} είναι ήδη κρατημένη και δεν υπάρχουν άλλα διαθέσιμα slots για ${date}.`,
+              nearest_available: nearestSlot,
+              available_slots: freeSlots,
+            });
+          }
+
+          // ── Slot is free — book it ──────────────────────────────
           const [apt] = await db.insert(appointments).values({
             customerId: agentRecord.customerId,
             agentId: agentRecord.id,
             callerName: callerName ?? 'Άγνωστος',
             callerPhone: callerPhone ?? 'unknown',
+            serviceType: serviceType ?? null,
             scheduledAt,
-            notes: `Κλείστηκε μέσω AI. Καλών: ${callerName ?? 'N/A'}`,
+            durationMinutes: 30,
+            notes: notes ?? `Κλείστηκε μέσω AI. Καλών: ${callerName ?? 'N/A'}`,
             status: 'pending',
           }).returning();
+
+          log.info({ appointmentId: apt?.id, date, time }, 'Appointment booked successfully');
 
           return c.json({
             success: true,
@@ -567,9 +634,8 @@ elevenlabsWebhookRoutes.post('/server-tool', async (c) => {
         }
 
         return c.json({
-          success: true,
-          message: `Ραντεβού κλείστηκε για ${callerName} στις ${date} ${time}`,
-          appointment: { date, time, name: callerName, phone: callerPhone },
+          success: false,
+          message: 'Δεν ήταν δυνατή η κράτηση. Λείπουν στοιχεία (ημερομηνία ή ώρα).',
         });
       }
 
