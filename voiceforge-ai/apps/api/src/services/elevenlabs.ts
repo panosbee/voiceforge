@@ -263,8 +263,8 @@ export async function updateAgent(
     promptConfig.rag = { enabled: true, max_vector_distance: 0.95, max_documents_length: 50000 };
   }
 
-  // Build tools array for transfer targets and forward phone number
-  if (updates.transferTargets !== undefined || updates.forwardPhoneNumber !== undefined) {
+  // Build tools array for transfer targets, forward phone, and webhook tools
+  if (updates.transferTargets !== undefined || updates.forwardPhoneNumber !== undefined || updates.webhookTools) {
     const tools: Array<Record<string, unknown>> = [];
 
     // Always include base system tools
@@ -317,6 +317,22 @@ export async function updateAgent(
           enableClientMessage: true,
         },
       });
+    }
+
+    // Add webhook tools (calendar, memory, business hours, etc.)
+    if (updates.webhookTools) {
+      for (const wt of updates.webhookTools) {
+        tools.push({
+          type: 'webhook',
+          name: wt.name,
+          description: wt.description,
+          apiSchema: {
+            url: wt.url,
+            method: wt.method?.toUpperCase() ?? 'POST',
+            ...(wt.parameters ? { requestBodySchema: wt.parameters } : {}),
+          },
+        });
+      }
     }
 
     promptConfig.tools = tools;

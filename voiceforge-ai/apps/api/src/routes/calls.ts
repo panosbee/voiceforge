@@ -6,7 +6,7 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { eq, and, gte, lte, desc, sql, count, inArray } from 'drizzle-orm';
+import { eq, and, gte, lte, desc, sql, count, inArray, isNull } from 'drizzle-orm';
 import { db } from '../db/connection.js';
 import { customers, calls, agents, appointments } from '../db/schema/index.js';
 import { authMiddleware, type AuthUser } from '../middleware/auth.js';
@@ -461,8 +461,20 @@ callRoutes.delete('/e2e-test/:id', async (c) => {
     return c.json<ApiResponse>({ success: false, error: { code: 'FORBIDDEN', message: 'Only test calls can be deleted' } }, 403);
   }
 
-  // Delete appointments linked to this test call first
+  // Delete appointments linked to this test call
   await db.delete(appointments).where(eq(appointments.callId, callId));
+
+  // Delete orphaned appointments (created by server-tool, callId=NULL) for same agent
+  if (callRecord.agentId) {
+    await db.delete(appointments).where(
+      and(
+        eq(appointments.customerId, customer.id),
+        eq(appointments.agentId, callRecord.agentId),
+        isNull(appointments.callId),
+      ),
+    );
+  }
+
   await db.delete(calls).where(eq(calls.id, callId));
 
   log.info({ callId }, '🗑️ E2E test call + appointments deleted');
@@ -499,9 +511,32 @@ callRoutes.delete('/e2e-test', async (c) => {
 
   const testCallIds = testCalls.map(c => c.id);
 
-  // Delete appointments linked to test calls
+  // Also find which agents had test calls (for orphaned appointment cleanup)
+  const testCallsWithAgents = await db
+    .select({ id: calls.id, agentId: calls.agentId })
+    .from(calls)
+    .where(
+      and(
+        eq(calls.customerId, customer.id),
+        sql`${calls.metadata}->>'isE2ETest' = 'true'`,
+      ),
+    );
+  const testAgentIds = [...new Set(testCallsWithAgents.map(c => c.agentId).filter(Boolean))] as string[];
+
+  // Delete appointments linked to test calls (by callId)
   if (testCallIds.length > 0) {
     await db.delete(appointments).where(inArray(appointments.callId, testCallIds));
+  }
+
+  // Delete orphaned appointments created by server-tool (callId=NULL) for test agents
+  if (testAgentIds.length > 0) {
+    await db.delete(appointments).where(
+      and(
+        eq(appointments.customerId, customer.id),
+        inArray(appointments.agentId, testAgentIds),
+        isNull(appointments.callId),
+      ),
+    );
   }
 
   // Delete the test calls

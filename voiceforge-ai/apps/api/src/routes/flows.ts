@@ -26,6 +26,72 @@ function isDevBypass(): boolean {
   return !elevenlabsService.isConfigured();
 }
 
+/** Build the standard webhook tools for server-tool callbacks (calendar, memory, etc.) */
+function buildWebhookTools() {
+  const serverToolUrl = `${env.API_BASE_URL}/elevenlabs-webhooks/server-tool`;
+  return [
+    {
+      name: 'check_availability',
+      description: 'Ελέγχει τα διαθέσιμα ραντεβού στο ημερολόγιο. ΠΑΝΤΑ κάλεσε αυτό το εργαλείο ΠΡΙΝ κλείσεις ραντεβού ώστε να δεις ποια slots είναι ελεύθερα. Επιστρέφει λίστα διαθέσιμων ωρών και κατειλημμένων slots για τη ζητούμενη ημερομηνία.',
+      url: serverToolUrl,
+      method: 'POST',
+      parameters: {
+        type: 'object',
+        properties: {
+          requested_date: { type: 'string', description: 'Ημερομηνία σε μορφή YYYY-MM-DD' },
+          service_type: { type: 'string', description: 'Τύπος ραντεβού' },
+        },
+        required: ['requested_date'],
+      },
+    },
+    {
+      name: 'book_appointment',
+      description: 'Κλείνει ραντεβού στο ημερολόγιο. Πρώτα ΠΑΝΤΑ κάλεσε check_availability. Αν η ώρα είναι πιασμένη, θα λάβεις slot_taken=true και την πιο κοντινή διαθέσιμη ώρα — πρότεινέ τη στον πελάτη.',
+      url: serverToolUrl,
+      method: 'POST',
+      parameters: {
+        type: 'object',
+        properties: {
+          date: { type: 'string', description: 'Ημερομηνία YYYY-MM-DD' },
+          time: { type: 'string', description: 'Ώρα HH:MM' },
+          caller_name: { type: 'string', description: 'Όνομα καλούντα' },
+          caller_phone: { type: 'string', description: 'Τηλέφωνο καλούντα' },
+          service_type: { type: 'string', description: 'Τύπος ραντεβού' },
+          notes: { type: 'string', description: 'Σημειώσεις' },
+        },
+        required: ['date', 'time', 'caller_name', 'caller_phone'],
+      },
+    },
+    {
+      name: 'get_current_datetime',
+      description: 'Επιστρέφει την τρέχουσα ημερομηνία και ώρα. Κάλεσε αυτό το εργαλείο αν ο πελάτης ρωτήσει τι μέρα ή ώρα είναι, ή αν χρειάζεσαι να ξέρεις τη σημερινή ημερομηνία για να κλείσεις ραντεβού.',
+      url: serverToolUrl,
+      method: 'POST',
+      parameters: { type: 'object', properties: {} },
+    },
+    {
+      name: 'get_caller_history',
+      description: 'Ελέγχει αν ο καλών έχει καλέσει ξανά και ανακτά το ιστορικό προηγούμενων κλήσεων. Κάλεσε αυτό το εργαλείο στην αρχή κάθε κλήσης με το τηλέφωνο του καλούντα για να θυμηθείς τι ειπώθηκε σε προηγούμενες κλήσεις.',
+      url: serverToolUrl,
+      method: 'POST',
+      parameters: {
+        type: 'object',
+        properties: {
+          caller_phone: { type: 'string', description: 'Τηλέφωνο του καλούντα σε μορφή +30...' },
+        },
+        required: ['caller_phone'],
+      },
+    },
+    {
+      name: 'get_business_hours',
+      description: 'Επιστρέφει το ωράριο λειτουργίας του γραφείου. Κάλεσε αυτό αν ο πελάτης ρωτήσει πότε είναι ανοιχτά.',
+      url: serverToolUrl,
+      method: 'POST',
+      parameters: { type: 'object', properties: {} },
+    },
+  ];
+}
+
 async function getCustomerByUserId(userId: string) {
   return db.query.customers.findFirst({ where: eq(customers.userId, userId) });
 }
@@ -334,6 +400,7 @@ flowRoutes.post('/:id/add-agent', zValidator('json', addAgentSchema), async (c) 
       greeting: body.greeting,
       voiceId: body.voiceId,
       language: body.language,
+      webhookTools: buildWebhookTools(),
     });
     elevenlabsAgentId = result.agentId;
   } else {
@@ -563,11 +630,12 @@ flowRoutes.post('/:id/deploy', async (c) => {
 
     const agentKbDocs = kbDocsByAgent[agentId] || [];
 
-    // Update ElevenLabs agent with full enhanced instructions + KB docs
+    // Update ElevenLabs agent with full enhanced instructions + KB docs + webhook tools
     try {
       await elevenlabsService.updateAgent(agent.elevenlabsAgentId, {
         instructions: enhancedInstructions,
         transferTargets,
+        webhookTools: buildWebhookTools(),
         ...(agentKbDocs.length > 0 ? { knowledgeBaseDocs: agentKbDocs } : {}),
       });
       deployResults.push({ agentId, name: agent.name, status: 'deployed' });
