@@ -172,9 +172,10 @@ export async function createAgent(params: CreateAgentParams): Promise<CreateAgen
   }
 
   // Build knowledge base config — prefer knowledgeBaseDocs (has name), fallback to knowledgeBaseDocIds
+  // usage_mode: 'prompt' = content always included in LLM context (not just vector search)
   const knowledgeBase = params.knowledgeBaseDocs
-    ? params.knowledgeBaseDocs.map((doc) => ({ type: 'file' as const, id: doc.id, name: doc.name }))
-    : (params.knowledgeBaseDocIds ?? []).map((docId) => ({ type: 'file' as const, id: docId, name: docId }));
+    ? params.knowledgeBaseDocs.map((doc) => ({ type: 'file' as const, id: doc.id, name: doc.name, usage_mode: 'prompt' as const }))
+    : (params.knowledgeBaseDocIds ?? []).map((docId) => ({ type: 'file' as const, id: docId, name: docId, usage_mode: 'prompt' as const }));
 
   try {
     const ttsModelId = params.ttsModel || env.ELEVENLABS_MODEL_ID || 'eleven_v3_conversational';
@@ -192,6 +193,8 @@ export async function createAgent(params: CreateAgentParams): Promise<CreateAgen
                   knowledgeBase,
                   rag: {
                     enabled: true,
+                    max_vector_distance: 0.95,
+                    max_documents_length: 50000,
                   },
                 }
               : {}),
@@ -253,11 +256,11 @@ export async function updateAgent(
 
   if (updates.instructions) promptConfig.prompt = updates.instructions;
   if (updates.knowledgeBaseDocs) {
-    promptConfig.knowledgeBase = updates.knowledgeBaseDocs.map((doc) => ({ type: 'file', id: doc.id, name: doc.name }));
-    promptConfig.rag = { enabled: true };
+    promptConfig.knowledgeBase = updates.knowledgeBaseDocs.map((doc) => ({ type: 'file', id: doc.id, name: doc.name, usage_mode: 'prompt' }));
+    promptConfig.rag = { enabled: true, max_vector_distance: 0.95, max_documents_length: 50000 };
   } else if (updates.knowledgeBaseDocIds) {
-    promptConfig.knowledgeBase = updates.knowledgeBaseDocIds.map((id) => ({ type: 'file', id, name: id }));
-    promptConfig.rag = { enabled: true };
+    promptConfig.knowledgeBase = updates.knowledgeBaseDocIds.map((id) => ({ type: 'file', id, name: id, usage_mode: 'prompt' }));
+    promptConfig.rag = { enabled: true, max_vector_distance: 0.95, max_documents_length: 50000 };
   }
 
   // Build tools array for transfer targets and forward phone number
