@@ -104,37 +104,6 @@ callRoutes.get('/', zValidator('query', listCallsSchema), async (c) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
-// GET /calls/:id — Get full call detail with transcript
-// ═══════════════════════════════════════════════════════════════════
-
-callRoutes.get('/:id', async (c) => {
-  const user = c.get('user');
-  const callId = c.req.param('id');
-
-  const customer = await db.query.customers.findFirst({
-    where: eq(customers.userId, user.sub),
-  });
-
-  if (!customer) {
-    return c.json<ApiResponse>({ success: false, error: { code: 'NOT_FOUND', message: 'Customer not found' } }, 404);
-  }
-
-  const callRecord = await db.query.calls.findFirst({
-    where: and(eq(calls.id, callId), eq(calls.customerId, customer.id)),
-    with: {
-      agent: { columns: { name: true } },
-      appointments: true,
-    },
-  });
-
-  if (!callRecord) {
-    return c.json<ApiResponse>({ success: false, error: { code: 'NOT_FOUND', message: 'Call not found' } }, 404);
-  }
-
-  return c.json<ApiResponse>({ success: true, data: callRecord });
-});
-
-// ═══════════════════════════════════════════════════════════════════
 // GET /calls/analytics — Dashboard KPIs
 // ═══════════════════════════════════════════════════════════════════
 
@@ -245,6 +214,95 @@ callRoutes.get('/calendar/month', zValidator('query', calendarSchema), async (c)
 });
 
 // ═══════════════════════════════════════════════════════════════════
+// GET /calls/calendar/appointments — Appointments for a month
+// Returns appointments on their SCHEDULED date (not call date)
+// ═══════════════════════════════════════════════════════════════════
+
+const appointmentsCalendarSchema = z.object({
+  year: z.coerce.number().int().min(2020).max(2100),
+  month: z.coerce.number().int().min(1).max(12),
+});
+
+callRoutes.get('/calendar/appointments', zValidator('query', appointmentsCalendarSchema), async (c) => {
+  const user = c.get('user');
+  const { year, month } = c.req.valid('query');
+
+  const customer = await db.query.customers.findFirst({
+    where: eq(customers.userId, user.sub),
+  });
+
+  if (!customer) {
+    return c.json<ApiResponse>({ success: false, error: { code: 'NOT_FOUND', message: 'Customer not found' } }, 404);
+  }
+
+  const customerTz = customer.timezone || 'Europe/Athens';
+  const { startDate, endDate } = getMonthRangeInTimezone(year, month, customerTz);
+
+  const appointmentRecords = await db.query.appointments.findMany({
+    where: and(
+      eq(appointments.customerId, customer.id),
+      gte(appointments.scheduledAt, startDate),
+      lte(appointments.scheduledAt, endDate),
+    ),
+    orderBy: [desc(appointments.scheduledAt)],
+    with: {
+      agent: { columns: { name: true } },
+      call: { columns: { id: true, callerNumber: true, summary: true, transcript: true } },
+    },
+  });
+
+  return c.json<ApiResponse>({
+    success: true,
+    data: appointmentRecords.map((apt) => ({
+      id: apt.id,
+      callerName: apt.callerName,
+      callerPhone: apt.callerPhone,
+      agentName: apt.agent.name,
+      serviceType: apt.serviceType,
+      scheduledAt: apt.scheduledAt.toISOString(),
+      durationMinutes: apt.durationMinutes,
+      status: apt.status,
+      notes: apt.notes,
+      callId: apt.callId,
+      callSummary: apt.call?.summary ?? null,
+    })),
+    meta: { year, month, total: appointmentRecords.length },
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// GET /calls/:id — Get full call detail with transcript
+// MUST be after all static GET routes to avoid /:id catching "stats" etc.
+// ═══════════════════════════════════════════════════════════════════
+
+callRoutes.get('/:id', async (c) => {
+  const user = c.get('user');
+  const callId = c.req.param('id');
+
+  const customer = await db.query.customers.findFirst({
+    where: eq(customers.userId, user.sub),
+  });
+
+  if (!customer) {
+    return c.json<ApiResponse>({ success: false, error: { code: 'NOT_FOUND', message: 'Customer not found' } }, 404);
+  }
+
+  const callRecord = await db.query.calls.findFirst({
+    where: and(eq(calls.id, callId), eq(calls.customerId, customer.id)),
+    with: {
+      agent: { columns: { name: true } },
+      appointments: true,
+    },
+  });
+
+  if (!callRecord) {
+    return c.json<ApiResponse>({ success: false, error: { code: 'NOT_FOUND', message: 'Call not found' } }, 404);
+  }
+
+  return c.json<ApiResponse>({ success: true, data: callRecord });
+});
+
+// ═══════════════════════════════════════════════════════════════════
 // POST /calls/e2e-test — REMOVED (was mock data)
 // Real testing now uses AgentTestWidget → /calls/record-conversation
 // which opens a real ElevenLabs conversation, records the actual
@@ -298,9 +356,14 @@ callRoutes.delete('/e2e-test/:id', async (c) => {
     );
   }
 
+  // Delete dedup entry so this conversation can be re-recorded if needed
+  if (callRecord.telnyxConversationId) {
+    await db.delete(webhookEvents).where(eq(webhookEvents.eventId, callRecord.telnyxConversationId));
+  }
+
   await db.delete(calls).where(eq(calls.id, callId));
 
-  log.info({ callId }, '🗑️ E2E test call + appointments deleted');
+  log.info({ callId }, '🗑️ Test call + appointments + dedup deleted');
 
   return c.json<ApiResponse>({ success: true, data: { deleted: true } });
 });
@@ -362,6 +425,21 @@ callRoutes.delete('/e2e-test', async (c) => {
     );
   }
 
+  // Delete dedup entries for widget-recorded conversations so they can be re-recorded
+  const testCallConvIds = await db
+    .select({ convId: calls.telnyxConversationId })
+    .from(calls)
+    .where(
+      and(
+        eq(calls.customerId, customer.id),
+        sql`(${calls.metadata}->>'isE2ETest' = 'true' OR ${calls.metadata}->>'isWidgetTest' = 'true')`,
+      ),
+    );
+  const convIds = testCallConvIds.map(c => c.convId).filter(Boolean) as string[];
+  if (convIds.length > 0) {
+    await db.delete(webhookEvents).where(inArray(webhookEvents.eventId, convIds));
+  }
+
   // Delete the test calls
   const result = await db
     .delete(calls)
@@ -373,7 +451,7 @@ callRoutes.delete('/e2e-test', async (c) => {
     )
     .returning({ id: calls.id });
 
-  log.info({ count: result.length, customerId: customer.id }, '🗑️ All E2E test calls + appointments deleted');
+  log.info({ count: result.length, customerId: customer.id }, '🗑️ All test calls + appointments + dedup deleted');
 
   return c.json<ApiResponse>({ success: true, data: { deletedCount: result.length } });
 });
@@ -639,61 +717,4 @@ callRoutes.post('/record-conversation', zValidator('json', recordConversationSch
     log.error({ error, elevenlabsAgentId }, 'Failed to record widget conversation');
     return c.json<ApiResponse>({ success: false, error: { code: 'FETCH_FAILED', message: 'Failed to fetch conversation from ElevenLabs' } }, 500);
   }
-});
-
-// ═══════════════════════════════════════════════════════════════════
-// GET /calls/calendar/appointments — Appointments for a month
-// Returns appointments on their SCHEDULED date (not call date)
-// ═══════════════════════════════════════════════════════════════════
-
-const appointmentsCalendarSchema = z.object({
-  year: z.coerce.number().int().min(2020).max(2100),
-  month: z.coerce.number().int().min(1).max(12),
-});
-
-callRoutes.get('/calendar/appointments', zValidator('query', appointmentsCalendarSchema), async (c) => {
-  const user = c.get('user');
-  const { year, month } = c.req.valid('query');
-
-  const customer = await db.query.customers.findFirst({
-    where: eq(customers.userId, user.sub),
-  });
-
-  if (!customer) {
-    return c.json<ApiResponse>({ success: false, error: { code: 'NOT_FOUND', message: 'Customer not found' } }, 404);
-  }
-
-  const customerTz = customer.timezone || 'Europe/Athens';
-  const { startDate, endDate } = getMonthRangeInTimezone(year, month, customerTz);
-
-  const appointmentRecords = await db.query.appointments.findMany({
-    where: and(
-      eq(appointments.customerId, customer.id),
-      gte(appointments.scheduledAt, startDate),
-      lte(appointments.scheduledAt, endDate),
-    ),
-    orderBy: [desc(appointments.scheduledAt)],
-    with: {
-      agent: { columns: { name: true } },
-      call: { columns: { id: true, callerNumber: true, summary: true, transcript: true } },
-    },
-  });
-
-  return c.json<ApiResponse>({
-    success: true,
-    data: appointmentRecords.map((apt) => ({
-      id: apt.id,
-      callerName: apt.callerName,
-      callerPhone: apt.callerPhone,
-      agentName: apt.agent.name,
-      serviceType: apt.serviceType,
-      scheduledAt: apt.scheduledAt.toISOString(),
-      durationMinutes: apt.durationMinutes,
-      status: apt.status,
-      notes: apt.notes,
-      callId: apt.callId,
-      callSummary: apt.call?.summary ?? null,
-    })),
-    meta: { year, month, total: appointmentRecords.length },
-  });
 });
