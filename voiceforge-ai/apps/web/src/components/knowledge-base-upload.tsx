@@ -333,6 +333,7 @@ export function KnowledgeBaseUpload({ agentId, onDocumentsChange, compact = fals
           { key: 'text' as const, icon: Type, label: t.knowledgeBase.textTab },
         ]).map(({ key, icon: Icon, label }) => (
           <button
+            type="button"
             key={key}
             onClick={() => setUploadMode(key)}
             className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
@@ -401,6 +402,7 @@ export function KnowledgeBaseUpload({ agentId, onDocumentsChange, compact = fals
             />
           </div>
           <Button
+            type="button"
             size="sm"
             onClick={handleUrlUpload}
             disabled={!urlInput.trim()}
@@ -437,6 +439,7 @@ export function KnowledgeBaseUpload({ agentId, onDocumentsChange, compact = fals
             </p>
           </div>
           <Button
+            type="button"
             size="sm"
             onClick={handleTextUpload}
             disabled={!textInput.trim() || !textName.trim()}
@@ -476,7 +479,7 @@ export function KnowledgeBaseUpload({ agentId, onDocumentsChange, compact = fals
                 )}
               </div>
               {file.error && (
-                <button onClick={() => dismissUpload(file.id)} className="p-1 text-text-tertiary hover:text-text-primary">
+                <button type="button" onClick={() => dismissUpload(file.id)} className="p-1 text-text-tertiary hover:text-text-primary">
                   <X className="w-4 h-4" />
                 </button>
               )}
@@ -526,6 +529,7 @@ export function KnowledgeBaseUpload({ agentId, onDocumentsChange, compact = fals
                   <Spinner size="sm" />
                 )}
                 <button
+                  type="button"
                   onClick={() => handleDelete(doc.id, doc.name)}
                   disabled={deletingIds.has(doc.id)}
                   className="p-1.5 rounded-lg text-text-tertiary hover:text-danger-600 hover:bg-danger-50 transition-colors disabled:opacity-50"
@@ -540,6 +544,7 @@ export function KnowledgeBaseUpload({ agentId, onDocumentsChange, compact = fals
           {/* Re-sync KB button */}
           {agentId && documents.some((d) => d.status === 'ready') && (
             <Button
+              type="button"
               size="sm"
               variant="outline"
               onClick={handleResync}

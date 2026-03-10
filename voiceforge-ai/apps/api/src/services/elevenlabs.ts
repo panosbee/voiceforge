@@ -81,11 +81,21 @@ export interface CreateAgentParams {
   voiceSimilarity?: number;
   /** Voice speed (0.7-1.3). Default 0.95 for natural Greek speech */
   voiceSpeed?: number;
+  /** Dynamic variables to resolve in greeting/instructions (e.g. agent_name) */
+  dynamicVariables?: Record<string, string>;
 }
 
 export interface CreateAgentResult {
   agentId: string;
   name: string;
+}
+
+/**
+ * Replace {{variable}} placeholders in text with actual values.
+ * ElevenLabs dynamic variable syntax: {{var_name}}
+ */
+function resolveDynamicVariables(text: string, variables: Record<string, string>): string {
+  return text.replace(/\{\{(\w+)\}\}/g, (match, key) => variables[key] ?? match);
 }
 
 /**
@@ -95,6 +105,14 @@ export async function createAgent(params: CreateAgentParams): Promise<CreateAgen
   const client = getClient();
 
   log.info({ name: params.name, voice: params.voiceId }, 'Creating ElevenLabs agent');
+
+  // Resolve dynamic variables (e.g. {{agent_name}}) in greeting and instructions
+  const dynamicVars: Record<string, string> = {
+    agent_name: params.name.split(' - ')[0] ?? params.name, // Extract agent name (before " - BusinessName")
+    ...params.dynamicVariables,
+  };
+  const resolvedGreeting = resolveDynamicVariables(params.greeting, dynamicVars);
+  const resolvedInstructions = resolveDynamicVariables(params.instructions, dynamicVars);
 
   // Build tools array
   const tools: Array<Record<string, unknown>> = [];
@@ -186,7 +204,7 @@ export async function createAgent(params: CreateAgentParams): Promise<CreateAgen
       conversationConfig: {
         agent: {
           prompt: {
-            prompt: params.instructions,
+            prompt: resolvedInstructions,
             llm: llmModel,
             ...(knowledgeBase.length > 0
               ? {
@@ -200,7 +218,7 @@ export async function createAgent(params: CreateAgentParams): Promise<CreateAgen
               : {}),
             ...(tools.length > 0 ? { tools } : {}),
           },
-          firstMessage: params.greeting,
+          firstMessage: resolvedGreeting,
           language: params.language,
         },
         tts: {
@@ -246,6 +264,12 @@ export async function updateAgent(
 
   log.info({ agentId }, 'Updating ElevenLabs agent');
 
+  // Resolve dynamic variables in greeting/instructions
+  const dynamicVars: Record<string, string> = {
+    ...(updates.name ? { agent_name: updates.name.split(' - ')[0] } : {}),
+    ...updates.dynamicVariables,
+  };
+
   const body: Record<string, unknown> = {};
 
   if (updates.name) body.name = updates.name;
@@ -254,7 +278,7 @@ export async function updateAgent(
   const agentConfig: Record<string, unknown> = {};
   const promptConfig: Record<string, unknown> = {};
 
-  if (updates.instructions) promptConfig.prompt = updates.instructions;
+  if (updates.instructions) promptConfig.prompt = resolveDynamicVariables(updates.instructions, dynamicVars);
   if (updates.knowledgeBaseDocs) {
     promptConfig.knowledgeBase = updates.knowledgeBaseDocs.map((doc) => ({ type: 'file', id: doc.id, name: doc.name, usage_mode: 'prompt' }));
     promptConfig.rag = { enabled: true, max_vector_distance: 0.95, max_documents_length: 50000 };
@@ -341,7 +365,7 @@ export async function updateAgent(
   if (Object.keys(promptConfig).length > 0) {
     agentConfig.prompt = promptConfig;
   }
-  if (updates.greeting) agentConfig.firstMessage = updates.greeting;
+  if (updates.greeting) agentConfig.firstMessage = resolveDynamicVariables(updates.greeting, dynamicVars);
   if (updates.language) agentConfig.language = updates.language;
 
   if (Object.keys(agentConfig).length > 0) {
