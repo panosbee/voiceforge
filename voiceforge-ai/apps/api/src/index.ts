@@ -52,29 +52,30 @@ app.use('*', requestId());
 app.use('/api/*', bodyLimit({ maxSize: 512 * 1024 })); // 512KB for API
 app.use('/webhooks/*', bodyLimit({ maxSize: 2 * 1024 * 1024 })); // 2MB for webhooks
 
-// CORS — allow frontend origin only
-app.use(
-  '*',
-  cors({
+// CORS — allow frontend origin only (skip /widget/* which has its own CORS)
+app.use('*', async (c, next) => {
+  if (c.req.path.startsWith('/widget')) return next();
+  return cors({
     origin: env.NODE_ENV === 'production' ? [env.FRONTEND_URL] : ['http://localhost:3000', env.FRONTEND_URL],
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization', 'X-Request-Id', 'X-Admin-Token'],
     credentials: true,
     maxAge: 86400,
-  }),
-);
+  })(c, next);
+});
 
 // Security headers — CSP, HSTS, X-Frame-Options, etc.
-app.use(
-  '*',
-  secureHeaders({
+// Exclude /widget/* — those are embedded on third-party sites and need cross-origin access
+app.use('*', async (c, next) => {
+  if (c.req.path.startsWith('/widget')) return next();
+  return secureHeaders({
     strictTransportSecurity: 'max-age=63072000; includeSubDomains; preload',
     xFrameOptions: 'DENY',
     xContentTypeOptions: 'nosniff',
     referrerPolicy: 'strict-origin-when-cross-origin',
-    crossOriginEmbedderPolicy: false, // Allow external resources
-  }),
-);
+    crossOriginEmbedderPolicy: false,
+  })(c, next);
+});
 
 // Request timing
 app.use('*', timing());
@@ -113,6 +114,10 @@ app.route('/registration', registrationRoutes);
 // Widget embed routes (public — accessed from customer websites, CORS *)
 app.use('/widget/*', cors({ origin: '*', allowMethods: ['GET', 'POST', 'OPTIONS'], allowHeaders: ['Content-Type', 'Accept'], maxAge: 86400 }));
 app.use('/widget/*', rateLimiter(60, 60_000)); // 60 req/min per IP — prevent abuse
+app.use('/widget/*', async (c, next) => {
+  await next();
+  c.res.headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
+});
 app.route('/widget', widgetRoutes);
 
 // Admin panel (protected by ADMIN_SECRET)

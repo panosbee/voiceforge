@@ -56,11 +56,13 @@ export function AgentTestWidget({ agentId, agentName, onClose }: AgentTestWidget
   const [isRecording, setIsRecording] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const conversationRef = useRef<Awaited<ReturnType<typeof Conversation.startSession>> | null>(null);
+  const originalGUMRef = useRef<typeof navigator.mediaDevices.getUserMedia | null>(null);
 
   // Enhance browser audio constraints BEFORE the SDK captures the mic.
   // Forces noise suppression, echo cancellation, and auto gain control.
   useEffect(() => {
     const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    originalGUMRef.current = original;
     navigator.mediaDevices.getUserMedia = async (constraints) => {
       if (constraints && typeof constraints === 'object' && constraints.audio) {
         const audioConstraints = typeof constraints.audio === 'boolean'
@@ -70,7 +72,11 @@ export function AgentTestWidget({ agentId, agentName, onClose }: AgentTestWidget
       }
       return original(constraints);
     };
-    return () => { navigator.mediaDevices.getUserMedia = original; };
+    return () => {
+      if (originalGUMRef.current) {
+        navigator.mediaDevices.getUserMedia = originalGUMRef.current;
+      }
+    };
   }, []);
 
   // Check microphone permission
@@ -350,21 +356,25 @@ export function AgentTestWidget({ agentId, agentName, onClose }: AgentTestWidget
                 </div>
               </div>
 
+              <button
+                onClick={toggleMute}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full transition-colors text-sm font-medium ${
+                  isMuted
+                    ? 'bg-red-100 text-red-600 hover:bg-red-200'
+                    : 'bg-surface-tertiary text-text-secondary hover:bg-surface-quaternary'
+                }`}
+                title={isMuted ? t.testWidget.unmuteMic : t.testWidget.muteMic}
+              >
+                {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                <span>{isMuted ? t.testWidget.unmuteMic : t.testWidget.muteMic}</span>
+              </button>
+
               <p className="text-sm text-text-secondary font-medium">
                 {agentMode === 'speaking' ? t.testWidget.voiceResponse : t.testWidget.pressButton}
               </p>
 
               {/* Controls */}
               <div className="flex items-center gap-3">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={toggleMute}
-                  className={isMuted ? 'text-danger-500 border-danger-300' : ''}
-                >
-                  {isMuted ? <MicOff className="w-4 h-4 mr-1.5" /> : <Mic className="w-4 h-4 mr-1.5" />}
-                  {isMuted ? 'Muted' : 'Mute'}
-                </Button>
                 <Button
                   variant="danger"
                   size="sm"

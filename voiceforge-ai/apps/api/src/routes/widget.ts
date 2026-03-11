@@ -212,6 +212,59 @@ function generateWidgetScript(apiBaseUrl: string): string {
   var container = null;
   var overlay = null;
   var convaiLoaded = false;
+  var micStream = null;
+  var isMuted = false;
+  var originalGUM = null;
+
+  var micIconSvg = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" x2="12" y1="19" y2="22"></line></svg>';
+  var micOffIconSvg = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="2" x2="22" y2="22"></line><path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2"></path><path d="M5 10v2a7 7 0 0 0 12 5.29"></path><path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"></path><path d="M9 9v3a3 3 0 0 0 5.12 2.12"></path><line x1="12" x2="12" y1="19" y2="22"></line></svg>';
+
+  function patchGetUserMedia() {
+    if (originalGUM) return;
+    originalGUM = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia = function(constraints) {
+      return originalGUM(constraints).then(function(stream) {
+        if (constraints && constraints.audio) { micStream = stream; }
+        return stream;
+      });
+    };
+  }
+
+  function restoreGetUserMedia() {
+    if (originalGUM) {
+      navigator.mediaDevices.getUserMedia = originalGUM;
+      originalGUM = null;
+    }
+    micStream = null;
+    isMuted = false;
+  }
+
+  function toggleMute() {
+    if (!micStream) return;
+    isMuted = !isMuted;
+    var tracks = micStream.getAudioTracks();
+    for (var i = 0; i < tracks.length; i++) { tracks[i].enabled = !isMuted; }
+    updateMuteButton();
+  }
+
+  function updateMuteButton() {
+    var btn = document.getElementById('vf-mute-btn');
+    var label = document.getElementById('vf-mute-label');
+    if (!btn) return;
+    if (isMuted) {
+      btn.style.background = '#fee2e2';
+      btn.style.color = '#dc2626';
+      btn.style.borderColor = '#fca5a5';
+      btn.innerHTML = micOffIconSvg;
+      if (label) { label.textContent = 'Tap to unmute'; label.style.color = '#dc2626'; }
+    } else {
+      btn.style.background = '#f3f4f6';
+      btn.style.color = '#6b7280';
+      btn.style.borderColor = '#e5e7eb';
+      btn.innerHTML = micIconSvg;
+      if (label) { label.textContent = 'Tap to mute'; label.style.color = '#6b7280'; }
+    }
+  }
 
   // ── Fetch agent widget config ──
   function fetchConfig(cb) {
@@ -357,7 +410,8 @@ function generateWidgetScript(apiBaseUrl: string): string {
 
     container.appendChild(overlay);
 
-    // Load ElevenLabs widget
+    patchGetUserMedia();
+
     loadConvaiScript(function() {
       if (!cfg.elevenlabsAgentId || cfg.elevenlabsAgentId.indexOf('dev_') === 0) {
         body.innerHTML = '<div style="text-align:center;color:#6b7280;padding:24px;"><div style="font-size:40px;margin-bottom:12px;">🎙️</div><div style="font-size:14px;font-weight:500;">Voice assistant is being set up</div><div style="font-size:12px;margin-top:4px;">Please try again later</div></div>';
@@ -409,12 +463,29 @@ function generateWidgetScript(apiBaseUrl: string): string {
       };
 
       body.appendChild(convai);
+
+      var muteWrap = document.createElement('div');
+      muteWrap.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;pointer-events:none;z-index:10;';
+      var muteBtn = document.createElement('button');
+      muteBtn.id = 'vf-mute-btn';
+      muteBtn.setAttribute('aria-label', 'Mute microphone');
+      muteBtn.onclick = toggleMute;
+      muteBtn.style.cssText = 'pointer-events:auto;width:64px;height:64px;border-radius:50%;border:2px solid #e5e7eb;cursor:pointer;display:flex;align-items:center;justify-content:center;background:#f3f4f6;color:#6b7280;transition:all 0.2s;box-shadow:0 2px 8px rgba(0,0,0,0.1);';
+      muteBtn.innerHTML = micIconSvg;
+      var muteLabel = document.createElement('div');
+      muteLabel.id = 'vf-mute-label';
+      muteLabel.style.cssText = 'font-size:13px;color:#6b7280;font-weight:500;pointer-events:none;';
+      muteLabel.textContent = 'Tap to mute';
+      muteWrap.appendChild(muteBtn);
+      muteWrap.appendChild(muteLabel);
+      body.appendChild(muteWrap);
     });
   }
 
   // ── Close widget ──
   function closeWidget(openIcon) {
     isOpen = false;
+    restoreGetUserMedia();
     var fab = document.getElementById('vf-widget-fab');
     var iconEl = document.getElementById('vf-fab-icon');
     if (iconEl) iconEl.innerHTML = openIcon;

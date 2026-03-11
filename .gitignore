@@ -46,3 +46,4 @@ docker/data/
 
 # Misc
 .turbo/
+docs

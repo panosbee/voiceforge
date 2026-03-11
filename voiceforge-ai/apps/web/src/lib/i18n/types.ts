@@ -582,6 +582,8 @@ export interface Translations {
     appointmentDetected: string;
     recordingFailed: string;
     noConversationDetected: string;
+    muteMic: string;
+    unmuteMic: string;
   };
   // ── Calendar ───────────────────────────────────────────────────
   calendar: {
