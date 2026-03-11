@@ -8,6 +8,7 @@ export {
   customersRelations,
   industryEnum,
   planEnum,
+  userRoleEnum,
   type CustomerSelect,
   type CustomerInsert,
 } from './customers';
