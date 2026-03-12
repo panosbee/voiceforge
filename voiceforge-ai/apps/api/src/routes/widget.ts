@@ -223,6 +223,12 @@ function generateWidgetScript(apiBaseUrl: string): string {
     if (originalGUM) return;
     originalGUM = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
     navigator.mediaDevices.getUserMedia = function(constraints) {
+      if (constraints && constraints.audio) {
+        var a = typeof constraints.audio === 'boolean'
+          ? { noiseSuppression: true, echoCancellation: true, autoGainControl: true }
+          : Object.assign({}, constraints.audio, { noiseSuppression: true, echoCancellation: true, autoGainControl: true });
+        constraints = Object.assign({}, constraints, { audio: a });
+      }
       return originalGUM(constraints).then(function(stream) {
         if (constraints && constraints.audio) { micStream = stream; }
         return stream;
@@ -416,20 +422,6 @@ function generateWidgetScript(apiBaseUrl: string): string {
       if (!cfg.elevenlabsAgentId || cfg.elevenlabsAgentId.indexOf('dev_') === 0) {
         body.innerHTML = '<div style="text-align:center;color:#6b7280;padding:24px;"><div style="font-size:40px;margin-bottom:12px;">🎙️</div><div style="font-size:14px;font-weight:500;">Voice assistant is being set up</div><div style="font-size:12px;margin-top:4px;">Please try again later</div></div>';
         return;
-      }
-
-      // Enhance browser audio: force noise suppression + echo cancellation
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        var origGUM = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
-        navigator.mediaDevices.getUserMedia = function(c) {
-          if (c && c.audio) {
-            var a = typeof c.audio === 'boolean'
-              ? { noiseSuppression: true, echoCancellation: true, autoGainControl: true }
-              : Object.assign({}, c.audio, { noiseSuppression: true, echoCancellation: true, autoGainControl: true });
-            return origGUM(Object.assign({}, c, { audio: a }));
-          }
-          return origGUM(c);
-        };
       }
 
       body.innerHTML = '';
