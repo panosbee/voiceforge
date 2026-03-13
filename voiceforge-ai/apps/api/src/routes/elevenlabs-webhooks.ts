@@ -10,7 +10,7 @@ import { db } from '../db/connection.js';
 import { agents, calls, webhookEvents, appointments, customers, callerMemories } from '../db/schema/index.js';
 import { createLogger } from '../config/logger.js';
 import * as elevenlabsService from '../services/elevenlabs.js';
-import { sendCallSummaryEmail, isEmailConfigured } from '../services/email.js';
+import { notifyCallCompleted } from '../services/email.js';
 import { getTelephonyProvider } from '../services/telephony/index.js';
 import { parseDateTimeInTimezone } from '../services/timezone.js';
 import { extractAppointmentFromTranscript } from '../services/transcript-parser.js';
@@ -288,24 +288,18 @@ elevenlabsWebhookRoutes.post('/post-conversation', async (c) => {
       'Call record stored from ElevenLabs',
     );
 
-    // ── Email Notification ──────────────────────────────────────
-    if (isEmailConfigured() && customer && callRecord) {
-      try {
-        await sendCallSummaryEmail({
-          to: customer.email,
-          ownerName: customer.ownerName,
-          callerPhone: callerNumber,
-          agentName: agent.name,
-          durationSeconds,
-          summary: summary ?? 'Δεν υπάρχει διαθέσιμη περίληψη.',
-          sentiment: sentimentScore ?? undefined,
-          appointmentBooked,
-          callId: callRecord.id,
-        });
-        log.info({ callId: callRecord.id, to: customer.email }, 'Call summary email sent');
-      } catch (emailErr) {
-        log.error({ error: emailErr, callId: callRecord.id }, 'Failed to send call summary email');
-      }
+    if (customer && callRecord) {
+      await notifyCallCompleted({
+        callId: callRecord.id,
+        customerEmail: customer.email,
+        ownerName: customer.ownerName,
+        callerPhone: callerNumber,
+        agentName: agent.name,
+        durationSeconds,
+        summary,
+        sentiment: sentimentScore,
+        appointmentBooked,
+      });
     }
 
     // ── SMS Notification ────────────────────────────────────────

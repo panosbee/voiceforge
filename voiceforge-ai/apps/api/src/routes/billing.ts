@@ -13,6 +13,7 @@ import { authMiddleware, type AuthUser } from '../middleware/auth.js';
 import { createLogger } from '../config/logger.js';
 import { env } from '../config/env.js';
 import * as stripeService from '../services/stripe.js';
+import { sendPaymentFailedEmail, isEmailConfigured } from '../services/email.js';
 import type { ApiResponse, Plan } from '@voiceforge/shared';
 
 const log = createLogger('billing');
@@ -324,7 +325,23 @@ billingWebhookRoutes.post('/stripe', async (c) => {
           { stripeCustomerId, invoiceId: invoice.id },
           'Invoice payment failed — customer may lose access',
         );
-        // TODO: Send email notification about payment failure
+
+        if (isEmailConfigured()) {
+          try {
+            const failedCustomer = await db.query.customers.findFirst({
+              where: eq(customers.stripeCustomerId, stripeCustomerId),
+            });
+            if (failedCustomer) {
+              await sendPaymentFailedEmail({
+                to: failedCustomer.email,
+                ownerName: failedCustomer.ownerName,
+              });
+              log.info({ customerId: failedCustomer.id, to: failedCustomer.email }, 'Payment failed email sent');
+            }
+          } catch (emailErr) {
+            log.error({ error: emailErr, stripeCustomerId }, 'Failed to send payment failed email');
+          }
+        }
         break;
       }
 

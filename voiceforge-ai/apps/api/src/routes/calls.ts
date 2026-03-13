@@ -14,6 +14,7 @@ import { createLogger } from '../config/logger.js';
 import { getMonthRangeInTimezone, parseDateTimeInTimezone } from '../services/timezone.js';
 import * as elevenlabsService from '../services/elevenlabs.js';
 import { extractAppointmentFromTranscript } from '../services/transcript-parser.js';
+import { notifyCallCompleted } from '../services/email.js';
 import type { ApiResponse } from '@voiceforge/shared';
 
 const log = createLogger('calls');
@@ -721,6 +722,20 @@ callRoutes.post('/record-conversation', zValidator('json', recordConversationSch
       source: 'widget',
       payload: { conversationId, agentId: elevenlabsAgentId, source: 'record-conversation' },
     });
+
+    if (customer && callRecord) {
+      await notifyCallCompleted({
+        callId: callRecord.id,
+        customerEmail: customer.email,
+        ownerName: customer.ownerName,
+        callerPhone: callRecord.callerNumber,
+        agentName: agent.name,
+        durationSeconds,
+        summary,
+        sentiment: sentimentScore,
+        appointmentBooked,
+      });
+    }
 
     // Create appointment if AI detected one — with slot conflict resolution
     if (appointmentBooked) {

@@ -20,6 +20,7 @@ import { createLogger } from '../config/logger.js';
 import * as elevenlabsService from '../services/elevenlabs.js';
 import { parseDateTimeInTimezone } from '../services/timezone.js';
 import { extractAppointmentFromTranscript } from '../services/transcript-parser.js';
+import { notifyCallCompleted } from '../services/email.js';
 
 const log = createLogger('conversation-sync');
 
@@ -87,7 +88,7 @@ async function syncAgentConversations(agent: {
   name: string;
   language: string;
   phoneNumber: string | null;
-  customer: { id: string; timezone: string; email: string };
+  customer: { id: string; timezone: string; email: string; ownerName: string };
 }): Promise<{ recorded: number; skipped: number }> {
   if (!agent.elevenlabsAgentId) return { recorded: 0, skipped: 0 };
 
@@ -181,7 +182,7 @@ async function recordMissedConversation(
     name: string;
     language: string;
     phoneNumber: string | null;
-    customer: { id: string; timezone: string; email: string };
+    customer: { id: string; timezone: string; email: string; ownerName: string };
   },
 ): Promise<{ callId: string } | null> {
   const full = await elevenlabsService.getConversation(conversationId) as Record<string, any>;
@@ -299,6 +300,18 @@ async function recordMissedConversation(
     eventType: 'conversation_sync.recorded',
     source: 'conversation-sync',
     payload: { conversationId, callId: callRecord.id, agentId: agent.elevenlabsAgentId },
+  });
+
+  await notifyCallCompleted({
+    callId: callRecord.id,
+    customerEmail: agent.customer.email,
+    ownerName: agent.customer.ownerName,
+    callerPhone: callRecord.callerNumber,
+    agentName: agent.name,
+    durationSeconds,
+    summary,
+    sentiment: sentimentScore,
+    appointmentBooked,
   });
 
   // Create appointment if detected — with slot conflict resolution

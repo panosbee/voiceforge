@@ -555,3 +555,37 @@ export async function sendAppointmentInviteEmail(params: {
     ],
   });
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// Unified Call Notification
+// ═══════════════════════════════════════════════════════════════════
+
+export async function notifyCallCompleted(params: {
+  callId: string;
+  customerEmail: string;
+  ownerName: string;
+  callerPhone: string;
+  agentName: string;
+  durationSeconds: number;
+  summary: string | null;
+  sentiment: number | null;
+  appointmentBooked: boolean;
+}): Promise<void> {
+  if (!isEmailConfigured()) return;
+  try {
+    await sendCallSummaryEmail({
+      to: params.customerEmail,
+      ownerName: params.ownerName,
+      callerPhone: params.callerPhone,
+      agentName: params.agentName,
+      durationSeconds: params.durationSeconds,
+      summary: params.summary ?? 'Δεν υπάρχει διαθέσιμη περίληψη.',
+      sentiment: params.sentiment ?? undefined,
+      appointmentBooked: params.appointmentBooked,
+      callId: params.callId,
+    });
+    log.info({ callId: params.callId, to: params.customerEmail }, 'Call summary email sent');
+  } catch (err) {
+    log.error({ error: err, callId: params.callId }, 'Failed to send call summary email');
+  }
+}

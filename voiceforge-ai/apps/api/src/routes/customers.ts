@@ -11,6 +11,7 @@ import { db } from '../db/connection.js';
 import { customers, agents, icalCachedEvents } from '../db/schema/index.js';
 import { authMiddleware, type AuthUser } from '../middleware/auth.js';
 import { createLogger } from '../config/logger.js';
+import { sendWelcomeEmail, isEmailConfigured } from '../services/email.js';
 import type { ApiResponse } from '@voiceforge/shared';
 
 const log = createLogger('customers');
@@ -233,6 +234,26 @@ customerRoutes.post('/complete-onboarding', async (c) => {
   }
 
   log.info({ customerId: updated.id }, 'Onboarding completed');
+
+  if (isEmailConfigured()) {
+    try {
+      const firstAgent = await db.query.agents.findFirst({
+        where: eq(agents.customerId, updated.id),
+        columns: { name: true, phoneNumber: true },
+      });
+      await sendWelcomeEmail({
+        to: updated.email,
+        ownerName: updated.ownerName,
+        businessName: updated.businessName,
+        agentName: firstAgent?.name ?? 'AI Assistant',
+        phoneNumber: firstAgent?.phoneNumber ?? undefined,
+      });
+      log.info({ customerId: updated.id, to: updated.email }, 'Welcome email sent');
+    } catch (emailErr) {
+      log.error({ error: emailErr, customerId: updated.id }, 'Failed to send welcome email');
+    }
+  }
+
   return c.json<ApiResponse>({ success: true });
 });
 
