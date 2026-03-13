@@ -82,6 +82,7 @@ const envSchema = z.object({
 
   // Resend
   RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().default('VoiceForge AI <noreply@salimov.ai>'),
 
   // OpenAI (for AI support chatbot — optional, falls back to ElevenLabs agent)
   OPENAI_API_KEY: z.string().optional(),

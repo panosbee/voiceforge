@@ -9,7 +9,7 @@ import { createLogger } from '../config/logger.js';
 const log = createLogger('email');
 
 const RESEND_API = 'https://api.resend.com/emails';
-const FROM_ADDRESS = 'VoiceForge AI <noreply@voiceforge.ai>';
+const FROM_ADDRESS = env.EMAIL_FROM;
 
 // ── HTML Sanitization — prevents XSS in transactional emails ─────
 
@@ -289,7 +289,7 @@ export async function sendRegistrationNotificationEmail(params: {
       ) * params.durationMonths}`;
 
   // Admin email — in production, set this via env var
-  const adminEmail = 'admin@voiceforge.ai';
+  const adminEmail = env.ADMIN_EMAIL;
 
   await sendEmail({
     to: adminEmail,
