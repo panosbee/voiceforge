@@ -325,7 +325,8 @@ elevenlabsWebhookRoutes.post('/post-conversation', async (c) => {
 
     // ── Store Appointment if Booked — deduplicate with server tool ──
     // ── Post-Call Task Extraction ───────────────────────────────
-    if (callRecord && transcriptText && isEmailConfigured()) {
+    // Task extraction runs always (even without email config) — email sending is optional
+    if (callRecord && transcriptText) {
       try {
         // Check if this agent has task email recipients configured
         const taskEmailRecipients = await db.query.agentTaskEmails.findMany({
@@ -334,6 +335,8 @@ elevenlabsWebhookRoutes.post('/post-conversation', async (c) => {
         });
 
         if (taskEmailRecipients.length > 0) {
+          log.info({ agentId: agent.id, recipientCount: taskEmailRecipients.length }, '📋 Starting post-call task extraction');
+
           const extraction = await extractTasksFromTranscript({
             transcript: transcriptText,
             agentName: agent.name,
@@ -344,6 +347,8 @@ elevenlabsWebhookRoutes.post('/post-conversation', async (c) => {
             callerPhone: callerNumber !== 'unknown' ? callerNumber : undefined,
             language: agent.language,
           });
+
+          log.info({ hasTasks: extraction.hasTasks, taskCount: extraction.tasks.length }, '🤖 Task extraction complete');
 
           if (extraction.hasTasks) {
             for (const extractedTask of extraction.tasks) {
@@ -372,27 +377,44 @@ elevenlabsWebhookRoutes.post('/post-conversation', async (c) => {
                 confirmToken,
                 callerName: extractedTask.callerName,
                 callerPhone: extractedTask.callerPhone,
-              });
-
-              // Send task notification email
-              const confirmUrl = `${env.API_BASE_URL}/api/tasks/confirm/${taskId}?token=${confirmToken}`;
-              await sendTaskNotificationEmail({
-                to: matchedRecipient.email,
-                taskTitle: extractedTask.title,
-                taskDescription: extractedTask.description,
-                actionRequired: extractedTask.actionRequired,
-                priority: extractedTask.priority,
-                callerName: extractedTask.callerName,
-                callerPhone: extractedTask.callerPhone,
-                agentName: agent.name,
-                confirmUrl,
+                callerEmail: extractedTask.callerEmail,
               });
 
               log.info(
-                { taskId, callId: callRecord.id, role: matchedRecipient.roleLabel, email: matchedRecipient.email },
-                'Post-call task created and notification sent',
+                { taskId, callId: callRecord.id, role: matchedRecipient.roleLabel, email: matchedRecipient.email, title: extractedTask.title },
+                '✅ Task record created in DB',
               );
+
+              // Send task notification email (only if email service is configured)
+              if (isEmailConfigured()) {
+                const confirmUrl = `${env.API_BASE_URL}/api/tasks/confirm/${taskId}?token=${confirmToken}`;
+                await sendTaskNotificationEmail({
+                  to: matchedRecipient.email,
+                  taskTitle: extractedTask.title,
+                  taskDescription: extractedTask.description,
+                  actionRequired: extractedTask.actionRequired,
+                  priority: extractedTask.priority,
+                  callerName: extractedTask.callerName,
+                  callerPhone: extractedTask.callerPhone,
+                  callerEmail: extractedTask.callerEmail,
+                  agentName: agent.name,
+                  confirmUrl,
+                  transcript: transcriptText,
+                });
+
+                log.info(
+                  { taskId, email: matchedRecipient.email },
+                  '📧 Task notification email sent',
+                );
+              } else {
+                log.warn(
+                  { taskId, email: matchedRecipient.email },
+                  '📧 Email not configured — task saved but notification skipped',
+                );
+              }
             }
+          } else {
+            log.info({ callId: callRecord.id }, '📋 No tasks extracted from this call');
           }
         }
       } catch (taskErr) {

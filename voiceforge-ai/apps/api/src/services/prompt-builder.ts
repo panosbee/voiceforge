@@ -130,6 +130,8 @@ export interface BuildEnhancedInstructionsParams {
   supportedLanguages: string[];
   customerTimezone: string;
   customerLocale: string;
+  /** Free-text business hours typed by the user (optional — injected into prompt if present) */
+  businessHoursText?: string | null;
 }
 
 export function buildEnhancedInstructions(params: BuildEnhancedInstructionsParams): string {
@@ -225,5 +227,12 @@ export function buildEnhancedInstructions(params: BuildEnhancedInstructionsParam
         '- Once the customer chooses, book immediately with "book_appointment".\n',
       ].join('\n');
 
-  return languagePrefix + rawInstructions + safetyInstructions + callManagement + dateTimeInjection + languageInstructions + memoryInstructions + calendarInstructions;
+  // Business hours free-text injection (user-provided, placed right after their instructions)
+  const businessHoursBlock = params.businessHoursText?.trim()
+    ? customerLocale === 'el'
+      ? `\n\n[ΏΡΕΣ ΛΕΙΤΟΥΡΓΙΑΣ]\n${params.businessHoursText.trim()}\n`
+      : `\n\n[BUSINESS HOURS]\n${params.businessHoursText.trim()}\n`
+    : '';
+
+  return languagePrefix + rawInstructions + businessHoursBlock + safetyInstructions + callManagement + dateTimeInjection + languageInstructions + memoryInstructions + calendarInstructions;
 }

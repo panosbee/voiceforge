@@ -71,6 +71,7 @@ export function AgentEditModal({ agentId, onClose, onSaved }: AgentEditModalProp
   const [forwardPhoneNumber, setForwardPhoneNumber] = useState('');
   const [supportedLanguages, setSupportedLanguages] = useState<string[]>(['el']);
   const [primaryLanguage, setPrimaryLanguage] = useState('el');
+  const [businessHoursText, setBusinessHoursText] = useState('');
   const [elevenlabsAgentId, setElevenlabsAgentId] = useState<string | null>(null);
 
   // Widget embed config
@@ -155,6 +156,9 @@ export function AgentEditModal({ agentId, onClose, onSaved }: AgentEditModalProp
           if (agent.elevenlabsAgentId) {
             setElevenlabsAgentId(agent.elevenlabsAgentId);
           }
+          if ((agent as any).businessHoursText) {
+            setBusinessHoursText((agent as any).businessHoursText);
+          }
           // Widget embed config
           if ((agent as any).widgetEnabled !== undefined) setWidgetEnabled((agent as any).widgetEnabled);
           if ((agent as any).widgetColor) setWidgetColor((agent as any).widgetColor);
@@ -192,6 +196,7 @@ export function AgentEditModal({ agentId, onClose, onSaved }: AgentEditModalProp
         language: primaryLanguage,
         supportedLanguages,
         forwardPhoneNumber: forwardPhoneNumber.trim() || undefined,
+        businessHoursText: businessHoursText.trim() || undefined,
       };
 
       if (isEditing) {
@@ -476,6 +481,19 @@ export function AgentEditModal({ agentId, onClose, onSaved }: AgentEditModalProp
               rows={10}
               required
             />
+
+            <div>
+              <Textarea
+                label={t.agents.businessHoursText}
+                placeholder={t.agents.businessHoursTextPlaceholder}
+                value={businessHoursText}
+                onChange={(e) => setBusinessHoursText(e.target.value)}
+                rows={3}
+              />
+              <p className="text-xs text-text-tertiary mt-1">
+                {t.agents.businessHoursTextHint}
+              </p>
+            </div>
 
             <div className="flex justify-end gap-3 pt-4">
               <Button variant="outline" type="button" onClick={onClose}>

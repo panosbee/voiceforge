@@ -8,13 +8,17 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { eq, and, gte, lte, desc, sql, count, inArray, isNull } from 'drizzle-orm';
 import { db } from '../db/connection.js';
-import { customers, calls, agents, appointments, webhookEvents } from '../db/schema/index.js';
+import { customers, calls, agents, appointments, webhookEvents, agentTaskEmails, tasks, callerMemories } from '../db/schema/index.js';
 import { authMiddleware, type AuthUser } from '../middleware/auth.js';
 import { createLogger } from '../config/logger.js';
 import { getMonthRangeInTimezone, parseDateTimeInTimezone } from '../services/timezone.js';
 import * as elevenlabsService from '../services/elevenlabs.js';
 import { extractAppointmentFromTranscript } from '../services/transcript-parser.js';
-import { notifyCallCompleted } from '../services/email.js';
+import { notifyCallCompleted, sendTaskNotificationEmail, isEmailConfigured } from '../services/email.js';
+import { extractTasksFromTranscript } from '../services/task-extraction.js';
+import { generateConfirmToken } from './tasks.js';
+import { getTelephonyProvider } from '../services/telephony/index.js';
+import { env } from '../config/env.js';
 import type { ApiResponse } from '@voiceforge/shared';
 
 const log = createLogger('calls');
@@ -784,6 +788,213 @@ callRoutes.post('/record-conversation', zValidator('json', recordConversationSch
       }
     }
 
+    // ── SMS Notification ────────────────────────────────────────
+    const smsProvider = getTelephonyProvider();
+    if (smsProvider.isSmsConfigured() && customer?.phone && callRecord) {
+      try {
+        await smsProvider.sendCallSummarySms({
+          to: customer.phone,
+          callerPhone: callRecord.callerNumber,
+          agentName: agent.name,
+          durationSeconds,
+          summary: summary ?? 'Δεν υπάρχει διαθέσιμη περίληψη.',
+          appointmentBooked,
+        });
+        log.info({ callId: callRecord.id, to: customer.phone }, 'Call summary SMS sent');
+      } catch (smsErr) {
+        log.error({ error: smsErr, callId: callRecord.id }, 'Failed to send call summary SMS');
+      }
+    }
+
+    // ── Post-Call Task Extraction ───────────────────────────────
+    // Task extraction runs always (even without email config) — email sending is optional
+    if (callRecord && transcriptText) {
+      try {
+        const taskEmailRecipients = await db.query.agentTaskEmails.findMany({
+          where: eq(agentTaskEmails.agentId, agent.id),
+          orderBy: [agentTaskEmails.sortOrder],
+        });
+
+        if (taskEmailRecipients.length > 0) {
+          log.info({ agentId: agent.id, recipientCount: taskEmailRecipients.length }, '📋 Starting post-call task extraction (widget)');
+
+          const extraction = await extractTasksFromTranscript({
+            transcript: transcriptText,
+            agentName: agent.name,
+            roles: taskEmailRecipients.map((r) => ({
+              roleLabel: r.roleLabel,
+              roleDescription: r.roleDescription,
+            })),
+            callerPhone: callRecord.callerNumber !== 'widget' ? callRecord.callerNumber : undefined,
+            language: agent.language,
+          });
+
+          log.info({ hasTasks: extraction.hasTasks, taskCount: extraction.tasks.length }, '🤖 Task extraction complete (widget)');
+
+          if (extraction.hasTasks) {
+            for (const extractedTask of extraction.tasks) {
+              const matchedRecipient = taskEmailRecipients.find(
+                (r) => r.roleLabel === extractedTask.matchedRole,
+              ) ?? taskEmailRecipients[0]!;
+
+              const taskId = crypto.randomUUID();
+              const confirmToken = generateConfirmToken(taskId);
+
+              await db.insert(tasks).values({
+                id: taskId,
+                customerId: customer.id,
+                agentId: agent.id,
+                callId: callRecord.id,
+                taskEmailId: matchedRecipient.id,
+                title: extractedTask.title,
+                description: extractedTask.description,
+                actionRequired: extractedTask.actionRequired,
+                assignedEmail: matchedRecipient.email,
+                assignedRole: matchedRecipient.roleLabel,
+                status: 'pending',
+                priority: extractedTask.priority as 'low' | 'normal' | 'high' | 'urgent',
+                confirmToken,
+                callerName: extractedTask.callerName,
+                callerPhone: extractedTask.callerPhone,
+                callerEmail: extractedTask.callerEmail,
+              });
+
+              log.info(
+                { taskId, callId: callRecord.id, role: matchedRecipient.roleLabel, email: matchedRecipient.email, title: extractedTask.title },
+                '✅ Task record created in DB (widget)',
+              );
+
+              if (isEmailConfigured()) {
+                const confirmUrl = `${env.API_BASE_URL}/api/tasks/confirm/${taskId}?token=${confirmToken}`;
+                await sendTaskNotificationEmail({
+                  to: matchedRecipient.email,
+                  taskTitle: extractedTask.title,
+                  taskDescription: extractedTask.description,
+                  actionRequired: extractedTask.actionRequired,
+                  priority: extractedTask.priority,
+                  callerName: extractedTask.callerName,
+                  callerPhone: extractedTask.callerPhone,
+                  callerEmail: extractedTask.callerEmail,
+                  agentName: agent.name,
+                  confirmUrl,
+                  transcript: transcriptText,
+                });
+
+                log.info(
+                  { taskId, email: matchedRecipient.email },
+                  '📧 Task notification email sent (widget)',
+                );
+              } else {
+                log.warn(
+                  { taskId, email: matchedRecipient.email },
+                  '📧 Email not configured — task saved but notification skipped (widget)',
+                );
+              }
+            }
+          } else {
+            log.info({ callId: callRecord.id }, '📋 No tasks extracted from this call (widget)');
+          }
+        }
+      } catch (taskErr) {
+        log.error({ error: taskErr, callId: callRecord?.id }, 'Post-call task extraction failed — non-blocking (widget)');
+      }
+    }
+
+    // ── Episodic Memory — Update Caller Memory ──────────────────
+    const callerPhone = callRecord.callerNumber;
+    if (callRecord && callerPhone && callerPhone !== 'widget' && callerPhone !== 'unknown') {
+      try {
+        const memorySummary = summary || transcriptText?.slice(0, 500) || 'Κλήση χωρίς περίληψη.';
+
+        const newFacts: string[] = [];
+        if (extractedData.caller_name) newFacts.push(`Όνομα: ${extractedData.caller_name}`);
+        if (extractedData.appointment_reason) newFacts.push(`Ενδιαφέρον: ${extractedData.appointment_reason}`);
+        if (extractedData.caller_intent) newFacts.push(`Πρόθεση: ${extractedData.caller_intent}`);
+        if (appointmentBooked) newFacts.push(`Κλείστηκε ραντεβού`);
+        if (appointmentDate) newFacts.push(`Ραντεβού: ${appointmentDate} ${appointmentTime}`);
+
+        const existingMemory = await db.query.callerMemories.findFirst({
+          where: and(
+            eq(callerMemories.customerId, customer.id),
+            eq(callerMemories.callerPhone, callerPhone),
+          ),
+        });
+
+        if (existingMemory) {
+          const previousFacts = (existingMemory.keyFacts as string[]) || [];
+          const mergedFacts = [...new Set([...previousFacts, ...newFacts])].slice(0, 20);
+
+          const updatedSummary = existingMemory.callCount <= 5
+            ? `${existingMemory.summary}\n---\n[Κλήση #${existingMemory.callCount + 1}]: ${memorySummary}`
+            : compactMemorySummary(existingMemory.summary, memorySummary, existingMemory.callCount + 1);
+
+          const existingPrefs = (existingMemory.preferences as Record<string, unknown>) || {};
+          const newPrefs = {
+            ...existingPrefs,
+            ...(extractedData.appointment_reason ? { last_service_interest: extractedData.appointment_reason } : {}),
+            ...(extractedData.appointment_time ? { preferred_time: extractedData.appointment_time } : {}),
+            ...(extractedData.caller_intent ? { last_intent: extractedData.caller_intent } : {}),
+          };
+
+          const prevAvg = existingMemory.overallSentiment ?? 3;
+          const newAvg = sentimentScore
+            ? Math.round((prevAvg * existingMemory.callCount + sentimentScore) / (existingMemory.callCount + 1))
+            : prevAvg;
+
+          await db.update(callerMemories)
+            .set({
+              summary: updatedSummary,
+              keyFacts: mergedFacts,
+              preferences: newPrefs,
+              callerName: extractedData.caller_name || existingMemory.callerName,
+              overallSentiment: newAvg,
+              lastSentiment: sentimentScore ?? existingMemory.lastSentiment,
+              callCount: existingMemory.callCount + 1,
+              totalDurationSeconds: existingMemory.totalDurationSeconds + durationSeconds,
+              appointmentsBooked: existingMemory.appointmentsBooked + (appointmentBooked ? 1 : 0),
+              lastCallId: callRecord.id,
+              lastCallAt: new Date(),
+              agentId: agent.id,
+              updatedAt: new Date(),
+            })
+            .where(eq(callerMemories.id, existingMemory.id));
+
+          log.info(
+            { callerPhone, memoryId: existingMemory.id, callCount: existingMemory.callCount + 1 },
+            'Caller memory updated (episodic — widget)',
+          );
+        } else {
+          const [newMemory] = await db.insert(callerMemories).values({
+            customerId: customer.id,
+            agentId: agent.id,
+            callerPhone,
+            callerName: extractedData.caller_name ?? null,
+            summary: `[Κλήση #1]: ${memorySummary}`,
+            keyFacts: newFacts,
+            preferences: {
+              ...(extractedData.appointment_reason ? { last_service_interest: extractedData.appointment_reason } : {}),
+              ...(extractedData.caller_intent ? { last_intent: extractedData.caller_intent } : {}),
+            },
+            overallSentiment: sentimentScore,
+            lastSentiment: sentimentScore,
+            callCount: 1,
+            totalDurationSeconds: durationSeconds,
+            appointmentsBooked: appointmentBooked ? 1 : 0,
+            lastCallId: callRecord.id,
+            lastCallAt: new Date(),
+            firstCallAt: new Date(),
+          }).returning();
+
+          log.info(
+            { callerPhone, memoryId: newMemory?.id },
+            'New caller memory created (first call — widget)',
+          );
+        }
+      } catch (memoryErr) {
+        log.error({ error: memoryErr, callerPhone }, 'Failed to update caller memory (widget)');
+      }
+    }
+
     log.info(
       { callId: callRecord.id, conversationId, agentId: agent.id, duration: durationSeconds, hasAppointment: appointmentBooked },
       '📞 Widget conversation recorded',
@@ -806,3 +1017,33 @@ callRoutes.post('/record-conversation', zValidator('json', recordConversationSch
     return c.json<ApiResponse>({ success: false, error: { code: 'FETCH_FAILED', message: 'Failed to fetch conversation from ElevenLabs' } }, 500);
   }
 });
+
+// ═══════════════════════════════════════════════════════════════════
+// Helper: Compact Memory Summary
+// ═══════════════════════════════════════════════════════════════════
+
+function compactMemorySummary(existingSummary: string, newCallSummary: string, callNumber: number): string {
+  const callEntries = existingSummary.split('\n---\n');
+  const recentEntries = callEntries.slice(-3);
+  const olderCount = callEntries.length - 3;
+  const compactHeader = olderCount > 0
+    ? `[Σύνοψη ${olderCount} παλαιότερων κλήσεων]: Ο πελάτης έχει καλέσει ${olderCount} φορές πριν.`
+    : '';
+
+  const parts = [
+    compactHeader,
+    ...recentEntries,
+    `[Κλήση #${callNumber}]: ${newCallSummary}`,
+  ].filter(Boolean);
+
+  let result = parts.join('\n---\n');
+  if (result.length > 2000) {
+    result = result.slice(-2000);
+    const firstSep = result.indexOf('\n---\n');
+    if (firstSep > 0) {
+      result = result.slice(firstSep + 5);
+    }
+  }
+
+  return result;
+}

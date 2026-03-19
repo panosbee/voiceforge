@@ -19,6 +19,7 @@ export interface ExtractedTask {
   priority: 'low' | 'normal' | 'high' | 'urgent';
   callerName: string | null;
   callerPhone: string | null;
+  callerEmail: string | null;
 }
 
 export interface TaskExtractionResult {
@@ -70,9 +71,10 @@ RULES:
 2. Do NOT create tasks for greetings, general inquiries that were already answered, or small talk.
 3. Match each task to the MOST appropriate role from the list above.
 4. If a task doesn't match any role, use the closest match.
-5. Extract caller name and phone if mentioned in the transcript.
+5. Extract caller name, phone number, AND email address if mentioned in the transcript.
 6. Set priority: "urgent" for time-sensitive requests, "high" for important, "normal" for standard, "low" for nice-to-have.
 7. ${isGreek ? 'Write titles and descriptions in Greek.' : 'Write titles and descriptions in the same language as the transcript.'}
+8. IMPORTANT — Email intelligence: The transcript may contain email addresses. Emails mentioned BY THE CALLER (e.g., "my email is X" or "send it to X") are the caller's contact email — extract these as callerEmail. These are NOT the same as the department emails configured in the system. The callerEmail is how the business should contact the caller back.
 
 Respond with VALID JSON only. Schema:
 {
@@ -84,7 +86,8 @@ Respond with VALID JSON only. Schema:
       "matchedRole": "Exact role label from the list",
       "priority": "normal",
       "callerName": "Name or null",
-      "callerPhone": "Phone or null"
+      "callerPhone": "Phone or null",
+      "callerEmail": "Email mentioned by caller or null"
     }
   ]
 }
@@ -99,7 +102,7 @@ If there are NO actionable tasks, respond: {"tasks": []}`;
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'gpt-5.4',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: `Transcript:\n\n${params.transcript}` },

@@ -50,7 +50,7 @@ export function CookieConsentBanner() {
           {t.gdpr.cookieDescription}{' '}
           <Link
             href="/privacy"
-            className="text-primary underline hover:text-primary/80 transition-colors"
+            className="text-brand-600 underline hover:text-brand-700 transition-colors"
             target="_blank"
           >
             {t.gdpr.cookiePrivacyLink}
@@ -62,13 +62,13 @@ export function CookieConsentBanner() {
         <div className="flex items-center gap-3 shrink-0">
           <button
             onClick={reject}
-            className="text-sm text-text-secondary hover:text-text-primary underline transition-colors focus:outline-none focus:ring-2 focus:ring-primary rounded"
+            className="text-sm text-text-secondary hover:text-text-primary underline transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 rounded"
           >
             {t.gdpr.cookieReject}
           </button>
           <button
             onClick={accept}
-            className="text-sm bg-primary text-white px-4 py-2 rounded-lg font-medium hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+            className="text-sm bg-brand-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-brand-700 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
           >
             {t.gdpr.cookieAccept}
           </button>

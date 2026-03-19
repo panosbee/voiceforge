@@ -25,6 +25,8 @@ export interface Agent {
   supportedLanguages: string[]; // All languages this agent supports, e.g. ['el', 'en', 'de']
   tools: AgentTool[];
   dynamicVariables: Record<string, string>;
+  /** Free-text business hours description (injected into system prompt) */
+  businessHoursText: string | null;
   /** Per-agent business hours configuration (working days, hours, slot duration, closed dates) */
   businessHours: BusinessHoursConfig;
   telephonySettings: TelephonySettings;
@@ -149,6 +151,8 @@ export interface CreateAgentInput {
   forwardPhoneNumber?: string;
   tools?: AgentTool[];
   dynamicVariables?: Record<string, string>;
+  /** Free-text business hours to inject in the system prompt */
+  businessHoursText?: string;
 }
 
 /** Agent summary for list views */

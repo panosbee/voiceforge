@@ -603,8 +603,10 @@ export async function sendTaskNotificationEmail(params: {
   priority: string;
   callerName: string | null;
   callerPhone: string | null;
+  callerEmail: string | null;
   agentName: string;
   confirmUrl: string;
+  transcript?: string | null;
 }): Promise<void> {
   const priorityColors: Record<string, string> = {
     urgent: '#ef4444', high: '#f59e0b', normal: '#3b82f6', low: '#6b7280',
@@ -653,11 +655,26 @@ export async function sendTaskNotificationEmail(params: {
               <td style="padding:10px 0;color:#64748b;font-size:14px;">Τηλέφωνο</td>
               <td style="padding:10px 0;color:#1e293b;font-size:14px;font-weight:600;text-align:right;">${escapeHtml(params.callerPhone)}</td>
             </tr>` : ''}
+            ${params.callerEmail ? `
+            <tr style="border-bottom:1px solid #e2e8f0;">
+              <td style="padding:10px 0;color:#64748b;font-size:14px;">Email Πελάτη</td>
+              <td style="padding:10px 0;color:#1e293b;font-size:14px;font-weight:600;text-align:right;"><a href="mailto:${escapeHtml(params.callerEmail)}" style="color:#4f46e5;text-decoration:none;">${escapeHtml(params.callerEmail)}</a></td>
+            </tr>` : ''}
             <tr>
               <td style="padding:10px 0;color:#64748b;font-size:14px;">AI Βοηθός</td>
               <td style="padding:10px 0;color:#1e293b;font-size:14px;text-align:right;">${escapeHtml(params.agentName)}</td>
             </tr>
           </table>
+
+          ${params.transcript ? `
+          <div style="margin:24px 0;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+            <div style="background:#f1f5f9;padding:12px 16px;border-bottom:1px solid #e2e8f0;">
+              <p style="margin:0;font-size:14px;font-weight:600;color:#1e293b;">🎙️ Απομαγνητοφώνηση Συνομιλίας</p>
+            </div>
+            <div style="padding:16px;max-height:400px;overflow-y:auto;background:#fafafa;">
+              <pre style="font-family:Inter,system-ui,sans-serif;font-size:13px;color:#334155;line-height:1.8;margin:0;white-space:pre-wrap;word-wrap:break-word;">${escapeHtml(params.transcript)}</pre>
+            </div>
+          </div>` : ''}
 
           <div style="text-align:center;margin-top:32px;">
             <a href="${params.confirmUrl}" style="display:inline-block;background:#10b981;color:white;font-size:16px;font-weight:600;padding:14px 32px;border-radius:8px;text-decoration:none;">
@@ -671,7 +688,7 @@ export async function sendTaskNotificationEmail(params: {
       </body>
       </html>
     `,
-    text: `Νέο Task: ${params.taskTitle}\n${params.taskDescription}\nΕνέργεια: ${params.actionRequired}\nΕπιβεβαίωση: ${params.confirmUrl}`,
+    text: `Νέο Task: ${params.taskTitle}\n${params.taskDescription}\nΕνέργεια: ${params.actionRequired}\n${params.transcript ? `\nΣυνομιλία:\n${params.transcript}\n` : ''}Επιβεβαίωση: ${params.confirmUrl}`,
   });
 }
 

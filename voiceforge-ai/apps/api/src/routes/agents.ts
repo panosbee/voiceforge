@@ -120,6 +120,8 @@ const createAgentSchema = z.object({
   voiceSpeed: z.number().min(0.7).max(1.3).optional(),
   /** If provided, reuse existing ElevenLabs agent (from test-preview) instead of creating new */
   existingElevenlabsAgentId: z.string().optional(),
+  /** Free-text business hours displayed in the system prompt */
+  businessHoursText: z.string().max(2000).optional(),
   businessHours: z.object({
     weeklySchedule: z.record(
       z.object({
@@ -148,6 +150,8 @@ const updateAgentSchema = z.object({
   voiceStability: z.number().min(0).max(1).optional(),
   voiceSimilarity: z.number().min(0).max(1).optional(),
   voiceSpeed: z.number().min(0.7).max(1.3).optional(),
+  /** Free-text business hours displayed in the system prompt */
+  businessHoursText: z.string().max(2000).optional(),
   // Widget embed config
   widgetEnabled: z.boolean().optional(),
   widgetColor: z.string().max(20).optional(),
@@ -361,6 +365,7 @@ agentRoutes.post('/', zValidator('json', createAgentSchema), async (c) => {
     supportedLanguages: supportedLangs,
     customerTimezone: customerTz,
     customerLocale,
+    businessHoursText: body.businessHoursText,
   });
 
   try {
@@ -453,6 +458,7 @@ agentRoutes.post('/', zValidator('json', createAgentSchema), async (c) => {
         ...(body.voiceSimilarity !== undefined ? { voiceSimilarity: body.voiceSimilarity } : {}),
         ...(body.voiceSpeed !== undefined ? { voiceSpeed: body.voiceSpeed } : {}),
         ...(body.businessHours ? { businessHours: body.businessHours } : {}),
+        ...(body.businessHoursText !== undefined ? { businessHoursText: body.businessHoursText || null } : {}),
         isDefault: isFirst,
       })
       .returning();
@@ -515,6 +521,7 @@ agentRoutes.patch('/:id', zValidator('json', updateAgentSchema), async (c) => {
       supportedLanguages: updatedSupportedLangs,
       customerTimezone: customer.timezone || 'Europe/Athens',
       customerLocale: customer.locale?.startsWith('en') ? 'en' : 'el',
+      businessHoursText: body.businessHoursText !== undefined ? body.businessHoursText : (agent.businessHoursText as string | null),
     });
 
     // Fetch KB docs for this agent (pass to ElevenLabs on update)
@@ -577,6 +584,7 @@ agentRoutes.patch('/:id', zValidator('json', updateAgentSchema), async (c) => {
         ...(body.widgetIconType ? { widgetIconType: body.widgetIconType } : {}),
         ...(body.widgetAllowedOrigins !== undefined ? { widgetAllowedOrigins: body.widgetAllowedOrigins } : {}),
         ...(body.businessHours ? { businessHours: body.businessHours } : {}),
+        ...(body.businessHoursText !== undefined ? { businessHoursText: body.businessHoursText || null } : {}),
         tools: updateClientTools,
         updatedAt: new Date(),
       })

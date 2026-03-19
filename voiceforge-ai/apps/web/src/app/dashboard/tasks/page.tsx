@@ -22,6 +22,7 @@ import {
   Phone,
   User,
   Bot,
+  Mail,
 } from 'lucide-react';
 
 interface Task {
@@ -37,6 +38,7 @@ interface Task {
   priority: 'low' | 'normal' | 'high' | 'urgent';
   callerName: string | null;
   callerPhone: string | null;
+  callerEmail: string | null;
   reminderCount: number;
   confirmedAt: string | null;
   createdAt: string;
@@ -78,17 +80,16 @@ export default function TasksPage() {
   const loadTasks = useCallback(async () => {
     setIsLoading(true);
     try {
-      const result = await api.get<{ success: boolean; data: Task[]; meta: { total: number } }>('/api/tasks', {
+      const offset = (page - 1) * limit;
+      const result = await api.get<{ data: Task[]; pagination: { total: number; limit: number; offset: number } }>('/api/tasks', {
         params: {
-          page,
+          offset,
           limit,
           ...(statusFilter ? { status: statusFilter } : {}),
         },
       });
-      if (result.success) {
-        setTasks(result.data ?? []);
-        setTotal((result as any).meta?.total ?? 0);
-      }
+      setTasks(result.data ?? []);
+      setTotal(result.pagination?.total ?? 0);
     } catch {
       // Empty state will show
     } finally {
@@ -98,10 +99,8 @@ export default function TasksPage() {
 
   const loadStats = useCallback(async () => {
     try {
-      const result = await api.get<{ success: boolean; data: TaskStats }>('/api/tasks/stats');
-      if (result.success) {
-        setStats(result.data);
-      }
+      const result = await api.get<{ data: TaskStats }>('/api/tasks/stats');
+      setStats(result.data);
     } catch {
       // Stats are optional
     }
@@ -246,6 +245,12 @@ export default function TasksPage() {
                           <span className="flex items-center gap-1">
                             <User className="w-3.5 h-3.5" />
                             {task.callerName}
+                          </span>
+                        )}
+                        {task.callerEmail && (
+                          <span className="flex items-center gap-1">
+                            <Mail className="w-3.5 h-3.5" />
+                            {task.callerEmail}
                           </span>
                         )}
                       </div>

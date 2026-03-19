@@ -67,6 +67,9 @@ export const agents = pgTable('agents', {
   // Dynamic variables (defaults)
   dynamicVariables: jsonb('dynamic_variables').notNull().default('{}'),
 
+  // Business hours — free-text description (injected into system prompt)
+  businessHoursText: text('business_hours_text'),
+
   // Business hours config (per-agent scheduling)
   businessHours: jsonb('business_hours').notNull().default('{}'),
 

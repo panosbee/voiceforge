@@ -7,13 +7,20 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { db } from '../db/connection.js';
-import { tasks, agentTaskEmails, agents } from '../db/schema/index.js';
+import { tasks, agentTaskEmails, agents, customers } from '../db/schema/index.js';
 import { createLogger } from '../config/logger.js';
+import type { AuthUser } from '../middleware/auth.js';
 import { env } from '../config/env.js';
 import { createHmac } from 'node:crypto';
 import { authMiddleware } from '../middleware/auth.js';
 
 const log = createLogger('tasks');
+
+async function getCustomerByUserId(userId: string) {
+  return db.query.customers.findFirst({
+    where: eq(customers.userId, userId),
+  });
+}
 
 export const taskRoutes = new Hono();
 
@@ -49,7 +56,10 @@ const taskEmailSchema = z.object({
 
 // GET /tasks/emails/:agentId — List task emails for an agent
 taskRoutes.get('/emails/:agentId', async (c) => {
-  const customerId = c.get('customerId' as never) as string;
+  const user = c.get('user' as never) as AuthUser;
+  const customer = await getCustomerByUserId(user.sub);
+  if (!customer) return c.json({ error: 'Customer not found' }, 404);
+  const customerId = customer.id;
   const { agentId } = c.req.param();
 
   // Verify agent belongs to customer
@@ -68,7 +78,10 @@ taskRoutes.get('/emails/:agentId', async (c) => {
 
 // POST /tasks/emails/:agentId — Add a task email
 taskRoutes.post('/emails/:agentId', async (c) => {
-  const customerId = c.get('customerId' as never) as string;
+  const user = c.get('user' as never) as AuthUser;
+  const customer = await getCustomerByUserId(user.sub);
+  if (!customer) return c.json({ error: 'Customer not found' }, 404);
+  const customerId = customer.id;
   const { agentId } = c.req.param();
 
   const agent = await db.query.agents.findFirst({
@@ -94,7 +107,10 @@ taskRoutes.post('/emails/:agentId', async (c) => {
 
 // PATCH /tasks/emails/:id — Update a task email
 taskRoutes.patch('/emails/:id', async (c) => {
-  const customerId = c.get('customerId' as never) as string;
+  const user = c.get('user' as never) as AuthUser;
+  const customer = await getCustomerByUserId(user.sub);
+  if (!customer) return c.json({ error: 'Customer not found' }, 404);
+  const customerId = customer.id;
   const { id } = c.req.param();
 
   // Verify ownership via join
@@ -123,7 +139,10 @@ taskRoutes.patch('/emails/:id', async (c) => {
 
 // DELETE /tasks/emails/:id — Remove a task email
 taskRoutes.delete('/emails/:id', async (c) => {
-  const customerId = c.get('customerId' as never) as string;
+  const user = c.get('user' as never) as AuthUser;
+  const customer = await getCustomerByUserId(user.sub);
+  if (!customer) return c.json({ error: 'Customer not found' }, 404);
+  const customerId = customer.id;
   const { id } = c.req.param();
 
   const existing = await db.query.agentTaskEmails.findFirst({
@@ -142,7 +161,10 @@ taskRoutes.delete('/emails/:id', async (c) => {
 
 // PUT /tasks/emails/:agentId/bulk — Replace all task emails for an agent
 taskRoutes.put('/emails/:agentId/bulk', async (c) => {
-  const customerId = c.get('customerId' as never) as string;
+  const user = c.get('user' as never) as AuthUser;
+  const customer = await getCustomerByUserId(user.sub);
+  if (!customer) return c.json({ error: 'Customer not found' }, 404);
+  const customerId = customer.id;
   const { agentId } = c.req.param();
 
   const agent = await db.query.agents.findFirst({
@@ -185,7 +207,10 @@ taskRoutes.put('/emails/:agentId/bulk', async (c) => {
 
 // GET /tasks — List tasks for customer with filters
 taskRoutes.get('/', async (c) => {
-  const customerId = c.get('customerId' as never) as string;
+  const user = c.get('user' as never) as AuthUser;
+  const customer = await getCustomerByUserId(user.sub);
+  if (!customer) return c.json({ error: 'Customer not found' }, 404);
+  const customerId = customer.id;
   const status = c.req.query('status');         // pending | confirmed | expired
   const agentId = c.req.query('agentId');
   const limit = Math.min(parseInt(c.req.query('limit') ?? '50', 10), 200);
@@ -220,7 +245,10 @@ taskRoutes.get('/', async (c) => {
 
 // GET /tasks/stats — Summary stats for dashboard
 taskRoutes.get('/stats', async (c) => {
-  const customerId = c.get('customerId' as never) as string;
+  const user = c.get('user' as never) as AuthUser;
+  const customer = await getCustomerByUserId(user.sub);
+  if (!customer) return c.json({ error: 'Customer not found' }, 404);
+  const customerId = customer.id;
 
   const result = await db.select({
     total: sql<number>`count(*)::int`,
@@ -240,7 +268,10 @@ taskRoutes.get('/stats', async (c) => {
 
 // GET /tasks/:id — Single task detail
 taskRoutes.get('/:id', async (c) => {
-  const customerId = c.get('customerId' as never) as string;
+  const user = c.get('user' as never) as AuthUser;
+  const customer = await getCustomerByUserId(user.sub);
+  if (!customer) return c.json({ error: 'Customer not found' }, 404);
+  const customerId = customer.id;
   const { id } = c.req.param();
 
   const task = await db.query.tasks.findFirst({

@@ -55,6 +55,7 @@ export const tasks = pgTable('tasks', {
   // Caller info (from transcript)
   callerName: text('caller_name'),
   callerPhone: text('caller_phone'),
+  callerEmail: text('caller_email'),
 
   // Timestamps
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

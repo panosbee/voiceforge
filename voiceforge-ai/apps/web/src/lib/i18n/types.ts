@@ -205,6 +205,9 @@ export interface Translations {
     forwardPhoneHint: string;
     instructions: string;
     instructionsPlaceholder: string;
+    businessHoursText: string;
+    businessHoursTextPlaceholder: string;
+    businessHoursTextHint: string;
     noAgents: string;
     noAgentsDescription: string;
     draft: string;
