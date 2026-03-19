@@ -1229,25 +1229,25 @@ For a production service, you need documented procedures for:
 
 **Estimated effort: 5-7 days**
 
-- [ ] **Fix caller memory race** — use SQL atomic increments (`call_count = call_count + 1`) instead of read-then-write in `elevenlabs-webhooks.ts:376-425`
-- [ ] **Fix worker/webhook race** — wrap conversation-sync dedup check in transaction, match by conversation ID not time window (`conversation-sync.ts:109-133`)
-- [ ] **Add DB transactions** for Stripe checkout
-- [ ] **Add timeouts** to all raw `fetch()` calls (ElevenLabs TTS at `elevenlabs.ts:808`, Telnyx SIP at `telnyx.ts:404,427,459`)
-- [ ] **Add remaining DB indexes** (`customers.stripeCustomerId`) — ~~`agents.telnyxAssistantId`~~ already has `.unique()`, ~~`agents.elevenlabsAgentId`~~ moved to Phase 0
-- [ ] **Bump DB pool** from 25 to 50 for production (and set PostgreSQL `max_connections = 200`)
-- [ ] **Add Sentry error tracking**
-- [ ] **Add UptimeRobot monitoring**
-- [ ] **Implement Redis caching** for customer profile and agent config lookups
-- [ ] **Add retry logic** for ElevenLabs and Resend API calls (1-2 retries with exponential backoff)
-- [ ] **Add API client retry** in frontend (1 retry for GET requests)
-- [ ] **Add global error boundary** in frontend with user-friendly error messages
-- [ ] **Use bcrypt** for registration password hashing
-- [ ] **Add OpenGraph + Twitter Card meta tags** to `layout.tsx` (links shared on social/WhatsApp won't preview without these)
-- [ ] **Add robots.txt + sitemap.xml** to `apps/web/public/`
-- [ ] **Add product analytics** — Plausible (EU-hosted, no cookie consent needed) or PostHog
-- [ ] **Add rate-limit error handling in frontend** — show toast when API returns 429
-- [ ] **Add payment failure in-app banner** — warn users when subscription is at risk (not just email)
-- [ ] **Add email delivery tracking** — store Resend message ID per email sent, configure Resend webhooks (`delivered`/`bounced`/`complained`), show delivery status badge on call summaries in dashboard
+- [ ] **Fix caller memory race** — use SQL atomic increments (`call_count = call_count + 1`) instead of read-then-write in `elevenlabs-webhooks.ts:376-425` — [#26](https://github.com/Salimov-AI/voicecall/issues/26)
+- [ ] **Fix worker/webhook race** — wrap conversation-sync dedup check in transaction, match by conversation ID not time window (`conversation-sync.ts:109-133`) — [#27](https://github.com/Salimov-AI/voicecall/issues/27)
+- [ ] **Add DB transactions** for Stripe checkout — [#28](https://github.com/Salimov-AI/voicecall/issues/28)
+- [ ] **Add timeouts** to all raw `fetch()` calls (ElevenLabs TTS at `elevenlabs.ts:808`, Telnyx SIP at `telnyx.ts:404,427,459`) — [#29](https://github.com/Salimov-AI/voicecall/issues/29)
+- [ ] **Add remaining DB indexes** (`customers.stripeCustomerId`) — ~~`agents.telnyxAssistantId`~~ already has `.unique()`, ~~`agents.elevenlabsAgentId`~~ moved to Phase 0 — [#30](https://github.com/Salimov-AI/voicecall/issues/30)
+- [ ] **Bump DB pool** from 25 to 50 for production (and set PostgreSQL `max_connections = 200`) — [#31](https://github.com/Salimov-AI/voicecall/issues/31)
+- [ ] **Add Sentry error tracking** — [#32](https://github.com/Salimov-AI/voicecall/issues/32)
+- [ ] **Add UptimeRobot monitoring** — [#33](https://github.com/Salimov-AI/voicecall/issues/33)
+- [ ] **Implement Redis caching** for customer profile and agent config lookups — [#34](https://github.com/Salimov-AI/voicecall/issues/34)
+- [ ] **Add retry logic** for ElevenLabs and Resend API calls (1-2 retries with exponential backoff) — [#35](https://github.com/Salimov-AI/voicecall/issues/35)
+- [ ] **Add API client retry** in frontend (1 retry for GET requests) — [#36](https://github.com/Salimov-AI/voicecall/issues/36)
+- [ ] **Add global error boundary** in frontend with user-friendly error messages — [#37](https://github.com/Salimov-AI/voicecall/issues/37)
+- [ ] **Use bcrypt** for registration password hashing — [#38](https://github.com/Salimov-AI/voicecall/issues/38)
+- [ ] **Add OpenGraph + Twitter Card meta tags** to `layout.tsx` (links shared on social/WhatsApp won't preview without these) — [#39](https://github.com/Salimov-AI/voicecall/issues/39)
+- [ ] **Add robots.txt + sitemap.xml** to `apps/web/public/` — [#40](https://github.com/Salimov-AI/voicecall/issues/40)
+- [ ] **Add product analytics** — Plausible (EU-hosted, no cookie consent needed) or PostHog — [#41](https://github.com/Salimov-AI/voicecall/issues/41)
+- [ ] **Add rate-limit error handling in frontend** — show toast when API returns 429 — [#42](https://github.com/Salimov-AI/voicecall/issues/42)
+- [ ] **Add payment failure in-app banner** — warn users when subscription is at risk (not just email) — [#43](https://github.com/Salimov-AI/voicecall/issues/43)
+- [ ] **Add email delivery tracking** — store Resend message ID per email sent, configure Resend webhooks (`delivered`/`bounced`/`complained`), show delivery status badge on call summaries in dashboard — [#44](https://github.com/Salimov-AI/voicecall/issues/44)
 
 ### Phase 2: Testing & CI (First Month)
 
