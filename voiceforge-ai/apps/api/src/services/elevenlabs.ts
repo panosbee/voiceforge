@@ -250,15 +250,17 @@ export async function createAgent(params: CreateAgentParams): Promise<CreateAgen
           voiceId: params.voiceId,
           modelId: ttsModelId,
           voiceSettings: {
-            stability: params.voiceStability ?? 0.6,
-            similarityBoost: params.voiceSimilarity ?? 0.8,
+            stability: params.voiceStability ?? 0.75,
+            similarityBoost: params.voiceSimilarity ?? 0.85,
             speed: params.voiceSpeed ?? 0.95,
           },
         },
-        // Turn management: conversational mode allows caller to interrupt the agent naturally
+        // Turn management: conversational mode with language-safe timeouts
         turn: {
           mode: {
             type: 'conversational',
+            turnTimeout: 16000,
+            silenceEndCallTimeout: 30000,
           },
         },
         // Conversation limits
@@ -472,10 +474,12 @@ export async function updateAgent(
     conversationConfig.tts = ttsConfig;
   }
 
-  // Always ensure conversational turn mode is set (allows interruption)
+  // Turn management: conversational mode with language-safe timeouts
   conversationConfig.turn = {
     mode: {
       type: 'conversational',
+      turnTimeout: 16000,
+      silenceEndCallTimeout: 30000,
     },
   };
 

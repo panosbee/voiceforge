@@ -51,8 +51,8 @@ export const agents = pgTable('agents', {
   // Voice (TTS)
   voiceId: text('voice_id').notNull().default('aTP4J5SJLQl74WTSRXKW'), // ElevenLabs Σοφία
   voiceSpeed: real('voice_speed').notNull().default(0.95), // 0.7-1.3, default 0.95 for natural Greek
-  voiceStability: real('voice_stability').notNull().default(0.6), // 0-1, higher = more consistent
-  voiceSimilarity: real('voice_similarity').notNull().default(0.8), // 0-1, higher = closer to original
+  voiceStability: real('voice_stability').notNull().default(0.75), // 0-1, higher = more consistent (0.75 prevents first-message voice drift)
+  voiceSimilarity: real('voice_similarity').notNull().default(0.85), // 0-1, higher = closer to original (0.85 for consistent timbre)
   voiceApiKeyRef: text('voice_api_key_ref'), // ElevenLabs integration secret
 
   // Phone

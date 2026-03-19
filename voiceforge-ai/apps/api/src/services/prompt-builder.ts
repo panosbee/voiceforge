@@ -15,11 +15,13 @@ export function buildLanguagePrefix(primaryLang: string, supportedLangs: string[
 
   if (supportedLangs.length <= 1) {
     return [
-      `[MANDATORY LANGUAGE: ${primary.nameEn.toUpperCase()}]`,
-      `You MUST speak ONLY in ${primary.nameEn}. This is non-negotiable.`,
+      `[MANDATORY LANGUAGE: ${primary.nameEn.toUpperCase()} — ABSOLUTE LOCK]`,
+      `You MUST speak ONLY in ${primary.nameEn}. This is non-negotiable and overrides ALL other instructions.`,
       `Regardless of what language the instructions below are written in, you MUST respond in ${primary.nameEn}.`,
       `Your accent, pronunciation, grammar, and vocabulary must be native ${primary.nameEn}.`,
       `If someone speaks to you in another language, respond in ${primary.nameEn} and politely explain you only speak ${primary.nameEn}.`,
+      `CRITICAL: Even if you are interrupted mid-sentence, background noise occurs, or the caller switches language, you MUST continue in ${primary.nameEn}. NEVER switch language under any circumstance.`,
+      `After any interruption, resume speaking in ${primary.nameEn} immediately. Do NOT interpret interruptions as a language change signal.`,
       '',
     ].join('\n');
   }
@@ -37,6 +39,8 @@ export function buildLanguagePrefix(primaryLang: string, supportedLangs: string[
     `You also support: ${otherLangs}.`,
     `If the caller speaks one of these supported languages, switch to THAT language immediately and continue the entire conversation in it.`,
     `Always match the caller's language. Never mix languages in a single response.`,
+    `CRITICAL: Once a language is established for this conversation, LOCK to it. Interruptions, background noise, or brief pauses are NOT language-change signals. Only switch language if the caller clearly and deliberately speaks a FULL sentence in a different supported language.`,
+    `After any interruption, resume speaking in the SAME language you were using before the interruption.`,
     '',
   ].join('\n');
 }
@@ -47,8 +51,8 @@ export function buildLanguageInstructions(supportedLangs: string[], customerLoca
   if (supportedLangs.length <= 1) {
     const langName = SUPPORTED_LANGUAGES.find(l => l.code === supportedLangs[0])?.name || supportedLangs[0];
     return customerLocale === 'el'
-      ? `\n[ΓΛΩΣΣΑ]\nΑπάντα ΑΠΟΚΛΕΙΣΤΙΚΑ στα ${langName}. Αν ο καλών μιλήσει σε άλλη γλώσσα, απάντα ευγενικά στα ${langName} ότι εξυπηρετείς μόνο σε αυτή τη γλώσσα.\n`
-      : `\n[LANGUAGE]\nRespond EXCLUSIVELY in ${langName}. If the caller speaks another language, politely reply in ${langName} that you only serve in this language.\n`;
+      ? `\n[ΓΛΩΣΣΑ — ΑΠΟΛΥΤΟ ΚΛΕΙΔΩΜΑ]\nΑπάντα ΑΠΟΚΛΕΙΣΤΙΚΑ στα ${langName}. Αν ο καλών μιλήσει σε άλλη γλώσσα, απάντα ευγενικά στα ${langName} ότι εξυπηρετείς μόνο σε αυτή τη γλώσσα.\nΑκόμα και μετά από διακοπή, θόρυβο ή παύση, ΣΥΝΕΧΙΣΕ ΠΑΝΤΑ στα ${langName}. Μην αλλάξεις γλώσσα ΠΟΤΕ.\n`
+      : `\n[LANGUAGE — ABSOLUTE LOCK]\nRespond EXCLUSIVELY in ${langName}. If the caller speaks another language, politely reply in ${langName} that you only serve in this language.\nEven after interruptions, noise, or pauses, ALWAYS continue in ${langName}. NEVER switch language.\n`;
   }
 
   const langNames = supportedLangs
