@@ -284,7 +284,7 @@ export function AgentEditModal({ agentId, onClose, onSaved }: AgentEditModalProp
               }`}
             >
               <ClipboardList className="w-4 h-4" />
-              Tasks
+              {t.tasks.tasksTab}
             </button>
           </div>
         )}

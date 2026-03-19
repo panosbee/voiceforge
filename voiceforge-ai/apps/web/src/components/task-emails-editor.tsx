@@ -11,6 +11,7 @@ import { Button, Input, Spinner } from '@/components/ui';
 import { api } from '@/lib/api-client';
 import { Plus, Trash2, GripVertical, Mail, Save } from 'lucide-react';
 import { toast } from 'sonner';
+import { useI18n } from '@/lib/i18n';
 
 interface TaskEmail {
   id?: string;
@@ -25,6 +26,7 @@ interface TaskEmailsEditorProps {
 }
 
 export function TaskEmailsEditor({ agentId }: TaskEmailsEditorProps) {
+  const { t } = useI18n();
   const [emails, setEmails] = useState<TaskEmail[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -36,7 +38,7 @@ export function TaskEmailsEditor({ agentId }: TaskEmailsEditorProps) {
         const result = await api.get<{ data: TaskEmail[] }>(`/api/tasks/emails/${agentId}`);
         setEmails(result.data || []);
       } catch {
-        toast.error('Σφάλμα φόρτωσης task emails');
+        toast.error(t.tasks.loadError);
       } finally {
         setIsLoading(false);
       }
@@ -65,7 +67,7 @@ export function TaskEmailsEditor({ agentId }: TaskEmailsEditorProps) {
     // Validate
     const invalid = emails.some((e) => !e.email.trim() || !e.roleLabel.trim());
     if (invalid) {
-      toast.error('Συμπληρώστε email και ρόλο για κάθε εγγραφή');
+      toast.error(t.tasks.validationError);
       return;
     }
 
@@ -80,9 +82,9 @@ export function TaskEmailsEditor({ agentId }: TaskEmailsEditorProps) {
 
       const result = await api.put<{ data: TaskEmail[] }>(`/api/tasks/emails/${agentId}/bulk`, payload);
       setEmails(result.data || []);
-      toast.success('Οι παραλήπτες task αποθηκεύτηκαν');
+      toast.success(t.tasks.saveSuccess);
     } catch {
-      toast.error('Σφάλμα αποθήκευσης');
+      toast.error(t.tasks.saveError);
     } finally {
       setIsSaving(false);
     }
@@ -101,11 +103,10 @@ export function TaskEmailsEditor({ agentId }: TaskEmailsEditorProps) {
       {/* Header */}
       <div>
         <h3 className="text-lg font-semibold text-text-primary">
-          📋 Task Routing — Παραλήπτες Email
+          {t.tasks.routingTitle}
         </h3>
         <p className="text-sm text-text-secondary mt-1">
-          Προσθέστε emails τμημάτων. Μετά από κάθε κλήση, η AI αναλύει τη συνομιλία
-          και στέλνει tasks στο κατάλληλο τμήμα αυτόματα.
+          {t.tasks.routingDescription}
         </p>
       </div>
 
@@ -123,11 +124,11 @@ export function TaskEmailsEditor({ agentId }: TaskEmailsEditorProps) {
             <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
                 <label className="text-xs font-medium text-text-secondary mb-1 block">
-                  Email *
+                  {t.tasks.emailLabel}
                 </label>
                 <Input
                   type="email"
-                  placeholder="rentals@company.gr"
+                  placeholder={t.tasks.emailPlaceholder}
                   value={item.email}
                   onChange={(e) => updateEmail(index, 'email', e.target.value)}
                 />
@@ -135,11 +136,11 @@ export function TaskEmailsEditor({ agentId }: TaskEmailsEditorProps) {
 
               <div>
                 <label className="text-xs font-medium text-text-secondary mb-1 block">
-                  Ρόλος / Τμήμα *
+                  {t.tasks.roleLabel}
                 </label>
                 <Input
                   type="text"
-                  placeholder="Κρατήσεις αυτοκινήτων"
+                  placeholder={t.tasks.rolePlaceholder}
                   value={item.roleLabel}
                   onChange={(e) => updateEmail(index, 'roleLabel', e.target.value)}
                 />
@@ -147,11 +148,11 @@ export function TaskEmailsEditor({ agentId }: TaskEmailsEditorProps) {
 
               <div>
                 <label className="text-xs font-medium text-text-secondary mb-1 block">
-                  Περιγραφή (προαιρ.)
+                  {t.tasks.roleDescriptionLabel}
                 </label>
                 <Input
                   type="text"
-                  placeholder="Χειρίζεται κρατήσεις & διαθεσιμότητα"
+                  placeholder={t.tasks.roleDescriptionPlaceholder}
                   value={item.roleDescription}
                   onChange={(e) => updateEmail(index, 'roleDescription', e.target.value)}
                 />
@@ -171,8 +172,8 @@ export function TaskEmailsEditor({ agentId }: TaskEmailsEditorProps) {
         {emails.length === 0 && (
           <div className="text-center py-8 text-text-tertiary">
             <Mail className="w-10 h-10 mx-auto mb-3 opacity-40" />
-            <p className="text-sm">Δεν υπάρχουν παραλήπτες task</p>
-            <p className="text-xs mt-1">Προσθέστε emails τμημάτων για αυτόματη δρομολόγηση tasks</p>
+            <p className="text-sm">{t.tasks.noRecipients}</p>
+            <p className="text-xs mt-1">{t.tasks.noRecipientsDescription}</p>
           </div>
         )}
       </div>
@@ -187,7 +188,7 @@ export function TaskEmailsEditor({ agentId }: TaskEmailsEditorProps) {
           className="gap-1.5"
         >
           <Plus className="w-4 h-4" />
-          Προσθήκη Email
+          {t.tasks.addEmail}
         </Button>
 
         {emails.length > 0 && (
@@ -199,21 +200,21 @@ export function TaskEmailsEditor({ agentId }: TaskEmailsEditorProps) {
             className="gap-1.5"
           >
             {isSaving ? <Spinner size="sm" /> : <Save className="w-4 h-4" />}
-            Αποθήκευση
+            {t.tasks.save}
           </Button>
         )}
       </div>
 
       {/* Info box */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <p className="text-sm text-blue-800 font-medium">💡 Πώς λειτουργεί</p>
+        <p className="text-sm text-blue-800 font-medium">{t.tasks.howItWorks}</p>
         <ol className="text-xs text-blue-700 mt-2 space-y-1 list-decimal list-inside">
-          <li>Ο πελάτης καλεί τον AI agent</li>
-          <li>Μετά την κλήση, η AI αναλύει το transcript</li>
-          <li>Αν υπάρχει task, στέλνει email στο αντίστοιχο τμήμα</li>
-          <li>Ο παραλήπτης πατάει "Ολοκληρώθηκε" στο email</li>
-          <li>Αν δεν γίνει, στέλνεται υπενθύμιση (4h, 12h, 24h, 48h)</li>
-          <li>Βλέπετε το status όλων των tasks στο Dashboard → Tasks</li>
+          <li>{t.tasks.howItWorksStep1}</li>
+          <li>{t.tasks.howItWorksStep2}</li>
+          <li>{t.tasks.howItWorksStep3}</li>
+          <li>{t.tasks.howItWorksStep4}</li>
+          <li>{t.tasks.howItWorksStep5}</li>
+          <li>{t.tasks.howItWorksStep6}</li>
         </ol>
       </div>
     </div>

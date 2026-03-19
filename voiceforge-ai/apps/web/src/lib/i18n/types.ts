@@ -358,6 +358,69 @@ export interface Translations {
     };
   };
 
+  // ── Tasks ─────────────────────────────────────────────────────
+  tasks: {
+    title: string;
+    description: string;
+    // Stats
+    totalTasks: string;
+    pending: string;
+    confirmed: string;
+    expired: string;
+    avgConfirmTime: string;
+    // Filters
+    allTasks: string;
+    // Empty states
+    noTasksFound: string;
+    tryDifferentFilter: string;
+    tasksWillAppear: string;
+    // Detail fields
+    descriptionLabel: string;
+    actionRequired: string;
+    confirmedAt: string;
+    // Pagination
+    page: string;
+    of: string;
+    previous: string;
+    next: string;
+    // Reminders
+    remindersSent: string;
+    reminderSent: string;
+    // Priority labels
+    priorityUrgent: string;
+    priorityHigh: string;
+    priorityNormal: string;
+    priorityLow: string;
+    // Task emails editor
+    routingTitle: string;
+    routingDescription: string;
+    emailLabel: string;
+    emailPlaceholder: string;
+    roleLabel: string;
+    rolePlaceholder: string;
+    roleDescriptionLabel: string;
+    roleDescriptionPlaceholder: string;
+    noRecipients: string;
+    noRecipientsDescription: string;
+    addEmail: string;
+    save: string;
+    saving: string;
+    loadError: string;
+    validationError: string;
+    saveSuccess: string;
+    saveError: string;
+    // How it works
+    howItWorks: string;
+    howItWorksStep1: string;
+    howItWorksStep2: string;
+    howItWorksStep3: string;
+    howItWorksStep4: string;
+    howItWorksStep5: string;
+    howItWorksStep6: string;
+    // Agent modal tab
+    tasksTab: string;
+  };
+
   // ── Settings ───────────────────────────────────────────────────
   settings: {
     title: string;

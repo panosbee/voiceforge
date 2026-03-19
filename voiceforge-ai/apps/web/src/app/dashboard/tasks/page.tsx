@@ -116,8 +116,8 @@ export default function TasksPage() {
   return (
     <div>
       <PageHeader
-        title="Tasks"
-        description="AI-extracted tasks from calls — track departmental follow-ups"
+        title={t.tasks.title}
+        description={t.tasks.description}
       />
 
       {/* Stats Cards */}
@@ -130,7 +130,7 @@ export default function TasksPage() {
               </div>
               <div>
                 <p className="text-2xl font-bold text-text-primary">{stats.total}</p>
-                <p className="text-xs text-text-tertiary">Total Tasks</p>
+                <p className="text-xs text-text-tertiary">{t.tasks.totalTasks}</p>
               </div>
             </div>
           </Card>
@@ -141,7 +141,7 @@ export default function TasksPage() {
               </div>
               <div>
                 <p className="text-2xl font-bold text-text-primary">{stats.pending}</p>
-                <p className="text-xs text-text-tertiary">Pending</p>
+                <p className="text-xs text-text-tertiary">{t.tasks.pending}</p>
               </div>
             </div>
           </Card>
@@ -152,7 +152,7 @@ export default function TasksPage() {
               </div>
               <div>
                 <p className="text-2xl font-bold text-text-primary">{stats.confirmed}</p>
-                <p className="text-xs text-text-tertiary">Confirmed</p>
+                <p className="text-xs text-text-tertiary">{t.tasks.confirmed}</p>
               </div>
             </div>
           </Card>
@@ -163,7 +163,7 @@ export default function TasksPage() {
               </div>
               <div>
                 <p className="text-2xl font-bold text-text-primary">{stats.expired}</p>
-                <p className="text-xs text-text-tertiary">Expired</p>
+                <p className="text-xs text-text-tertiary">{t.tasks.expired}</p>
               </div>
             </div>
           </Card>
@@ -175,7 +175,7 @@ export default function TasksPage() {
         <div className="mb-6 px-4 py-3 bg-surface-secondary rounded-lg border border-border">
           <p className="text-sm text-text-secondary">
             <CheckCircle2 className="w-4 h-4 inline mr-1.5 text-green-600" />
-            Average confirmation time: <strong>{stats.avgConfirmHours.toFixed(1)}h</strong>
+            {t.tasks.avgConfirmTime} <strong>{stats.avgConfirmHours.toFixed(1)}h</strong>
           </p>
         </div>
       )}
@@ -185,10 +185,10 @@ export default function TasksPage() {
         <Filter className="w-4 h-4 text-text-tertiary" />
         <Select
           options={[
-            { value: '', label: 'All Tasks' },
-            { value: 'pending', label: 'Pending' },
-            { value: 'confirmed', label: 'Confirmed' },
-            { value: 'expired', label: 'Expired' },
+            { value: '', label: t.tasks.allTasks },
+            { value: 'pending', label: t.tasks.pending },
+            { value: 'confirmed', label: t.tasks.confirmed },
+            { value: 'expired', label: t.tasks.expired },
           ]}
           value={statusFilter}
           onChange={(e) => {
@@ -207,8 +207,8 @@ export default function TasksPage() {
       ) : tasks.length === 0 ? (
         <EmptyState
           icon={<ClipboardList className="w-12 h-12" />}
-          title="No tasks found"
-          description={statusFilter ? 'Try a different filter' : 'Tasks will appear here after calls are processed by the AI'}
+          title={t.tasks.noTasksFound}
+          description={statusFilter ? t.tasks.tryDifferentFilter : t.tasks.tasksWillAppear}
         />
       ) : (
         <>
@@ -257,13 +257,13 @@ export default function TasksPage() {
                     </div>
                     <div className="text-right shrink-0">
                       <Badge variant={sc.badgeVariant}>
-                        {task.status === 'pending' ? 'Pending' : task.status === 'confirmed' ? 'Confirmed' : 'Expired'}
+                        {task.status === 'pending' ? t.tasks.pending : task.status === 'confirmed' ? t.tasks.confirmed : t.tasks.expired}
                       </Badge>
                       <p className="text-xs text-text-tertiary mt-1">{formatRelativeTime(task.createdAt, t.shared)}</p>
                       {task.reminderCount > 0 && task.status === 'pending' && (
                         <p className="text-xs text-yellow-600 mt-0.5 flex items-center justify-end gap-1">
                           <AlertTriangle className="w-3 h-3" />
-                          {task.reminderCount} reminder{task.reminderCount > 1 ? 's' : ''} sent
+                          {task.reminderCount} {task.reminderCount > 1 ? t.tasks.remindersSent : t.tasks.reminderSent}
                         </p>
                       )}
                     </div>
@@ -274,20 +274,20 @@ export default function TasksPage() {
                     <div className="mt-4 pt-4 border-t border-border space-y-3">
                       {task.description && (
                         <div>
-                          <p className="text-xs font-medium text-text-tertiary mb-1">Description</p>
+                          <p className="text-xs font-medium text-text-tertiary mb-1">{t.tasks.descriptionLabel}</p>
                           <p className="text-sm text-text-secondary">{task.description}</p>
                         </div>
                       )}
                       {task.actionRequired && (
                         <div className="p-3 bg-brand-50 rounded-lg border border-brand-200">
-                          <p className="text-xs font-medium text-brand-700 mb-1">Action Required</p>
+                          <p className="text-xs font-medium text-brand-700 mb-1">{t.tasks.actionRequired}</p>
                           <p className="text-sm text-brand-800">{task.actionRequired}</p>
                         </div>
                       )}
                       {task.confirmedAt && (
                         <p className="text-xs text-green-600">
                           <CheckCircle2 className="w-3.5 h-3.5 inline mr-1" />
-                          Confirmed: {formatRelativeTime(task.confirmedAt, t.shared)}
+                          {t.tasks.confirmedAt} {formatRelativeTime(task.confirmedAt, t.shared)}
                         </p>
                       )}
                     </div>
@@ -302,7 +302,7 @@ export default function TasksPage() {
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-4">
               <p className="text-sm text-text-secondary">
-                Page {page} of {totalPages}
+                {t.tasks.page} {page} {t.tasks.of} {totalPages}
               </p>
               <div className="flex gap-2">
                 <Button
@@ -312,7 +312,7 @@ export default function TasksPage() {
                   disabled={page === 1}
                   leftIcon={<ChevronLeft className="w-4 h-4" />}
                 >
-                  Previous
+                  {t.tasks.previous}
                 </Button>
                 <Button
                   variant="outline"
@@ -321,7 +321,7 @@ export default function TasksPage() {
                   disabled={page === totalPages}
                   rightIcon={<ChevronRight className="w-4 h-4" />}
                 >
-                  Next
+                  {t.tasks.next}
                 </Button>
               </div>
             </div>
