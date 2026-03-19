@@ -8,6 +8,7 @@ import type { MiddlewareHandler } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { createLogger } from '../config/logger.js';
 import { env } from '../config/env.js';
+import { getRedisClient } from '../db/redis.js';
 
 const log = createLogger('rate-limit');
 
@@ -65,63 +66,38 @@ class MemoryRateLimitStore implements RateLimitStore {
 // ── Redis Store (production — distributed rate limiting) ──────────
 
 class RedisRateLimitStore implements RateLimitStore {
-  private redisUrl: string;
+  private luaScript = `
+    local key = KEYS[1]
+    local limit = tonumber(ARGV[1])
+    local windowMs = tonumber(ARGV[2])
+    local now = tonumber(ARGV[3])
 
-  constructor(redisUrl: string) {
-    this.redisUrl = redisUrl;
-  }
+    redis.call('ZREMRANGEBYSCORE', key, 0, now - windowMs)
 
-  /**
-   * Uses Redis Lua script for atomic sliding window rate limiting.
-   * Falls back to simple INCR/EXPIRE pattern for compatibility.
-   */
+    local count = redis.call('ZCARD', key)
+
+    if count >= limit then
+      local oldest = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
+      local resetAt = 0
+      if #oldest > 0 then
+        resetAt = tonumber(oldest[2]) + windowMs
+      end
+      return {0, 0, resetAt}
+    end
+
+    redis.call('ZADD', key, now, now .. '-' .. math.random(1000000))
+    redis.call('PEXPIRE', key, windowMs)
+
+    return {1, limit - count - 1, now + windowMs}
+  `;
+
   async check(key: string, limit: number, windowMs: number) {
     try {
-      // Dynamic import to avoid requiring ioredis in development
-      const { default: Redis } = await import('ioredis');
-      const redis = new Redis(this.redisUrl, {
-        maxRetriesPerRequest: 1,
-        lazyConnect: true,
-        connectTimeout: 2000,
-      });
-
-      await redis.connect();
-
+      const redis = getRedisClient();
       const redisKey = `rl:${key}`;
-      const windowSec = Math.ceil(windowMs / 1000);
       const now = Date.now();
 
-      // Lua script: atomic sliding window counter
-      const luaScript = `
-        local key = KEYS[1]
-        local limit = tonumber(ARGV[1])
-        local windowMs = tonumber(ARGV[2])
-        local now = tonumber(ARGV[3])
-
-        -- Remove expired entries
-        redis.call('ZREMRANGEBYSCORE', key, 0, now - windowMs)
-
-        -- Count current entries
-        local count = redis.call('ZCARD', key)
-
-        if count >= limit then
-          local oldest = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
-          local resetAt = 0
-          if #oldest > 0 then
-            resetAt = tonumber(oldest[2]) + windowMs
-          end
-          return {0, 0, resetAt}
-        end
-
-        -- Add current request
-        redis.call('ZADD', key, now, now .. '-' .. math.random(1000000))
-        redis.call('PEXPIRE', key, windowMs)
-
-        return {1, limit - count - 1, now + windowMs}
-      `;
-
-      const result = await redis.eval(luaScript, 1, redisKey, limit, windowMs, now) as number[];
-      await redis.quit();
+      const result = (await redis['eval'](this.luaScript, 1, redisKey, limit, windowMs, now)) as number[];
 
       const allowed = result[0] === 1;
       const remaining = result[1]!;
@@ -135,7 +111,6 @@ class RedisRateLimitStore implements RateLimitStore {
       };
     } catch (error) {
       log.warn({ error }, 'Redis rate limiter failed — falling back to allow');
-      // On Redis failure, allow the request (fail-open with warning)
       return { allowed: true, remaining: limit, retryAfterSec: 0, resetTimeSec: 0 };
     }
   }
@@ -147,7 +122,7 @@ let rateLimitStore: RateLimitStore;
 
 if (env.REDIS_URL) {
   log.info('Using Redis-backed rate limiter (production)');
-  rateLimitStore = new RedisRateLimitStore(env.REDIS_URL);
+  rateLimitStore = new RedisRateLimitStore();
 } else {
   log.info('Using in-memory rate limiter (development)');
   rateLimitStore = new MemoryRateLimitStore();

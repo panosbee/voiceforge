@@ -15,6 +15,7 @@ import { HTTPException } from 'hono/http-exception';
 
 import { env, logger } from './config/index.js';
 import { disconnectDb } from './db/connection.js';
+import { disconnectRedis } from './db/redis.js';
 import { telnyxWebhookMiddleware } from './middleware/webhook-verify.js';
 import { apiRateLimiter, webhookRateLimiter, rateLimiter } from './middleware/rate-limit.js';
 
@@ -202,7 +203,7 @@ async function shutdown(signal: string) {
   logger.info({ signal }, 'Shutdown signal received');
 
   server.close(async () => {
-    await disconnectDb();
+    await Promise.all([disconnectDb(), disconnectRedis()]);
     logger.info('Server shut down gracefully');
     process.exit(0);
   });

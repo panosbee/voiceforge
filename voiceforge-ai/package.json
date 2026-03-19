@@ -18,6 +18,7 @@
     "build:api": "pnpm --filter @voiceforge/api build",
     "build:web": "pnpm --filter @voiceforge/web build",
     "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "db:generate": "pnpm --filter @voiceforge/api db:generate",
     "db:migrate": "pnpm --filter @voiceforge/api db:migrate",
