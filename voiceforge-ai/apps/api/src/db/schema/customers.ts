@@ -62,6 +62,13 @@ export const customers = pgTable('customers', {
   locale: text('locale').notNull().default('el-GR'),
   webhookUrl: text('webhook_url'), // Customer's own webhook (optional)
 
+  // GDPR Consent (Art. 6/7 — Lawful basis recording)
+  consentToProcessing: boolean('consent_to_processing').notNull().default(false),   // Required
+  consentToRecording: boolean('consent_to_recording').notNull().default(false),     // Required
+  consentToMarketing: boolean('consent_to_marketing').notNull().default(false),     // Optional
+  consentAcceptedAt: timestamp('consent_accepted_at', { withTimezone: true }),
+  consentIpAddress: text('consent_ip_address'),
+
   // Status
   onboardingCompleted: boolean('onboarding_completed').notNull().default(false),
   isActive: boolean('is_active').notNull().default(true),

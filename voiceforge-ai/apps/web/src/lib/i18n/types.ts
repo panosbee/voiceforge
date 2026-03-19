@@ -846,6 +846,18 @@ export interface Translations {
     timezoneLabel: string;
     timezoneGreece: string;
     timezoneCyprus: string;
+    // GDPR Consent (Art. 6/7)
+    consentTitle: string;
+    consentProcessing: string;
+    consentProcessingDesc: string;
+    consentRecording: string;
+    consentRecordingDesc: string;
+    consentMarketing: string;
+    consentMarketingDesc: string;
+    consentRequired: string;
+    consentPrivacyLink: string;
+    consentTermsLink: string;
+    consentAnd: string;
     // Step Plan
     planTitle: string;
     planSubtitle: string;
@@ -989,5 +1001,14 @@ export interface Translations {
     description: string;
     tryAgain: string;
     refreshPage: string;
+  };
+
+  // ── GDPR / Cookie Banner ───────────────────────────────────────
+  gdpr: {
+    cookieTitle: string;
+    cookieDescription: string;
+    cookiePrivacyLink: string;
+    cookieAccept: string;
+    cookieReject: string;
   };
 }

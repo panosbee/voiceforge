@@ -6,8 +6,9 @@
 import { Hono } from 'hono';
 import { eq, and } from 'drizzle-orm';
 import { db } from '../db/connection.js';
-import { customers, agents, calls, appointments, auditLogs } from '../db/schema/index.js';
+import { customers, agents, calls, appointments, auditLogs, callerMemories, knowledgeBaseDocuments } from '../db/schema/index.js';
 import { authMiddleware, type AuthUser } from '../middleware/auth.js';
+import * as elevenlabsService from '../services/elevenlabs.js';
 import { createLogger } from '../config/logger.js';
 import type { ApiResponse } from '@voiceforge/shared';
 
@@ -40,7 +41,7 @@ gdprRoutes.get('/export', async (c) => {
     }
 
     // Fetch all related data in parallel
-    const [agentRecords, callRecords, appointmentRecords, auditRecords] = await Promise.all([
+    const [agentRecords, callRecords, appointmentRecords, auditRecords, memoryRecords, kbDocRecords] = await Promise.all([
       db.query.agents.findMany({
         where: eq(agents.customerId, customer.id),
       }),
@@ -51,6 +52,8 @@ gdprRoutes.get('/export', async (c) => {
         where: eq(appointments.customerId, customer.id),
       }),
       db.select().from(auditLogs).where(eq(auditLogs.customerId, customer.id)),
+      db.select().from(callerMemories).where(eq(callerMemories.customerId, customer.id)),
+      db.select().from(knowledgeBaseDocuments).where(eq(knowledgeBaseDocuments.customerId, customer.id)),
     ]);
 
     // Build the export payload — all user data in one JSON
@@ -110,6 +113,22 @@ gdprRoutes.get('/export', async (c) => {
         resource: log.resource,
         createdAt: log.createdAt.toISOString(),
       })),
+      callerMemories: memoryRecords.map((m) => ({
+        id: m.id,
+        callerPhone: m.callerPhone,
+        callerName: m.callerName,
+        summary: m.summary,
+        callCount: m.callCount,
+        firstCallAt: m.firstCallAt.toISOString(),
+        lastCallAt: m.lastCallAt.toISOString(),
+      })),
+      knowledgeBaseDocuments: kbDocRecords.map((doc) => ({
+        id: doc.id,
+        name: doc.name,
+        source: doc.source,
+        status: doc.status,
+        createdAt: doc.createdAt.toISOString(),
+      })),
     };
 
     // Log the export event
@@ -117,7 +136,7 @@ gdprRoutes.get('/export', async (c) => {
       customerId: customer.id,
       userId: user.sub,
       action: 'data_export',
-      details: { format: 'json', recordCount: callRecords.length + agentRecords.length },
+      details: { format: 'json', recordCount: callRecords.length + agentRecords.length + memoryRecords.length + kbDocRecords.length },
       ipAddress: c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip') ?? undefined,
       userAgent: c.req.header('user-agent') ?? undefined,
     });
@@ -171,6 +190,16 @@ gdprRoutes.delete('/delete-account', async (c) => {
       ipAddress: c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip') ?? undefined,
       userAgent: c.req.header('user-agent') ?? undefined,
     });
+
+    // Delete AI agents from ElevenLabs before cascade-deleting the DB records
+    const agentRecordsToDelete = await db.query.agents.findMany({
+      where: eq(agents.customerId, customer.id),
+    });
+    await Promise.allSettled(
+      agentRecordsToDelete
+        .filter((a) => a.elevenlabsAgentId)
+        .map((a) => elevenlabsService.deleteAgent(a.elevenlabsAgentId!)),
+    );
 
     // CASCADE deletion: all related data (agents, calls, appointments) are deleted
     // via FK onDelete: 'cascade' in the schema

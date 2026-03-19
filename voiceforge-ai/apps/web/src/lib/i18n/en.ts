@@ -920,6 +920,18 @@ export const en: Translations = {
     timezoneLabel: 'Timezone',
     timezoneGreece: 'Greece (Europe/Athens)',
     timezoneCyprus: 'Cyprus (Europe/Nicosia)',
+    // GDPR Consent
+    consentTitle: 'Consent & Terms',
+    consentProcessing: 'I consent to the processing of personal data *',
+    consentProcessingDesc: 'I accept the processing of my data for the operation of the VoiceForge AI service in accordance with the Privacy Policy.',
+    consentRecording: 'I consent to call recording & storage *',
+    consentRecordingDesc: 'I acknowledge that calls handled by my business assistant may be recorded and stored for up to 12 months.',
+    consentMarketing: 'I want to receive informational emails and product updates',
+    consentMarketingDesc: 'Optional — you can unsubscribe at any time.',
+    consentRequired: '* Required',
+    consentPrivacyLink: 'Privacy Policy',
+    consentTermsLink: 'Terms of Service',
+    consentAnd: 'and',
     planTitle: 'Choose a Plan',
     planSubtitle: 'You can upgrade or downgrade at any time.',
     agentTitle: 'Set Up Your AI Assistant',
@@ -1013,6 +1025,15 @@ export const en: Translations = {
     numberAcquireError: 'Number could not be acquired. Try again later.',
     setupComplete: 'Setup complete! Welcome!',
     unknownError: 'Unknown error',
+  },
+
+  // ── GDPR ───────────────────────────────────────────────────────
+  gdpr: {
+    cookieTitle: 'Cookie Notice',
+    cookieDescription: 'We use essential cookies to operate this service. By continuing you accept our use of cookies.',
+    cookiePrivacyLink: 'Privacy Policy',
+    cookieAccept: 'Accept',
+    cookieReject: 'Reject',
   },
 
   // ── Support Chatbot ────────────────────────────────────────────

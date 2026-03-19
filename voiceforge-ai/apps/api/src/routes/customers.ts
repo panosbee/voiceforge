@@ -41,6 +41,14 @@ const registerCustomerSchema = z.object({
   userRole: z.enum(['naive', 'expert']).optional().default('naive'),
   timezone: z.string().optional().default('Europe/Athens'),
   locale: z.string().optional().default('el-GR'),
+  // GDPR consent fields (Art. 6/7)
+  consentToProcessing: z.boolean().refine((v) => v === true, {
+    message: 'Απαιτείται η συναίνεση επεξεργασίας δεδομένων',
+  }),
+  consentToRecording: z.boolean().refine((v) => v === true, {
+    message: 'Απαιτείται η συναίνεση εγγραφής συνομιλιών',
+  }),
+  consentToMarketing: z.boolean().optional().default(false),
 });
 
 const updateCustomerSchema = z.object({
@@ -142,6 +150,12 @@ customerRoutes.post('/register', zValidator('json', registerCustomerSchema), asy
         userRole: body.userRole,
         timezone: body.timezone,
         locale: body.locale,
+        // GDPR consent recording
+        consentToProcessing: body.consentToProcessing,
+        consentToRecording: body.consentToRecording,
+        consentToMarketing: body.consentToMarketing ?? false,
+        consentAcceptedAt: new Date(),
+        consentIpAddress: c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip') ?? undefined,
       })
       .returning();
 

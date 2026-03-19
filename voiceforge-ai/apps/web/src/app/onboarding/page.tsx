@@ -32,6 +32,10 @@ export interface OnboardingData {
   email: string;
   phone: string;
   timezone: string;
+  // GDPR consent (Art. 6/7)
+  consentToProcessing: boolean;
+  consentToRecording: boolean;
+  consentToMarketing: boolean;
 
   // Step 2 — Plan
   plan: Plan;
@@ -60,6 +64,9 @@ const initialData: OnboardingData = {
   email: '',
   phone: '',
   timezone: 'Europe/Athens',
+  consentToProcessing: false,
+  consentToRecording: false,
+  consentToMarketing: false,
   plan: 'basic',
   agentName: '',
   greeting: '',
@@ -110,6 +117,9 @@ export default function OnboardingPage() {
           phone: data.phone,
           plan: data.plan,
           timezone: data.timezone,
+          consentToProcessing: data.consentToProcessing,
+          consentToRecording: data.consentToRecording,
+          consentToMarketing: data.consentToMarketing,
         });
         toast.success(t.onboarding.accountCreated);
       } catch (regErr) {

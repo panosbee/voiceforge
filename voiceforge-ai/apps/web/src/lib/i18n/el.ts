@@ -920,6 +920,18 @@ export const el: Translations = {
     timezoneLabel: 'Ζώνη Ώρας',
     timezoneGreece: 'Ελλάδα (Europe/Athens)',
     timezoneCyprus: 'Κύπρος (Europe/Nicosia)',
+    // GDPR Consent
+    consentTitle: 'Συναίνεση & Όροι',
+    consentProcessing: 'Συναίνω στην επεξεργασία προσωπικών δεδομένων *',
+    consentProcessingDesc: 'Αποδέχομαι την επεξεργασία των δεδομένων μου για τη λειτουργία της υπηρεσίας VoiceForge AI σύμφωνα με την Πολιτική Απορρήτου.',
+    consentRecording: 'Συναίνω στην εγγραφή & αποθήκευση τηλεφωνικών συνομιλιών *',
+    consentRecordingDesc: 'Ενημερώθηκα ότι οι τηλεφωνικές συνομιλίες της επιχείρησής μου ενδέχεται να εγγραφούν και αποθηκεύονται για διάρκεια έως 12 μήνες.',
+    consentMarketing: 'Θέλω να λαμβάνω ενημερωτικά emails και νέα προϊόντα',
+    consentMarketingDesc: 'Προαιρετικό — μπορείτε να απενεργοποιήσετε ανά πάσα στιγμή.',
+    consentRequired: '* Υποχρεωτικό',
+    consentPrivacyLink: 'Πολιτική Απορρήτου',
+    consentTermsLink: 'Όρους Χρήσης',
+    consentAnd: 'και',
     planTitle: 'Επιλέξτε Πακέτο',
     planSubtitle: 'Μπορείτε να αναβαθμίσετε ή υποβαθμίσετε ανά πάσα στιγμή.',
     agentTitle: 'Ρυθμίστε τον AI Βοηθό',
@@ -1013,6 +1025,15 @@ export const el: Translations = {
     numberAcquireError: 'Ο αριθμός δεν μπόρεσε να αποκτηθεί. Δοκιμάστε αργότερα.',
     setupComplete: 'Η εγκατάσταση ολοκληρώθηκε! Καλώς ήρθατε!',
     unknownError: 'Άγνωστο σφάλμα',
+  },
+
+  // ── GDPR ──────────────────────────────────────────────────
+  gdpr: {
+    cookieTitle: '🍪 Cookies & Προστασία Δεδομένων',
+    cookieDescription: 'Χρησιμοποιούμε cookies για τη λειτουργία της πλατφόρμας και την ανάλυση χρήσης. Διαβάστε την',
+    cookiePrivacyLink: 'Πολιτική Απορρήτου',
+    cookieAccept: 'Αποδοχή',
+    cookieReject: 'Απόρριψη',
   },
 
   // ── Support Chatbot ────────────────────────────────────────────

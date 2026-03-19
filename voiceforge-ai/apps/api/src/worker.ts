@@ -23,16 +23,9 @@ async function runDataRetentionCleanup(): Promise<void> {
 
   log.info({ retentionDays, cutoffDate: cutoffDate.toISOString() }, 'Starting call data retention cleanup');
 
+  // Hard delete: GDPR Art. 5(1)(e) — data must not be kept longer than necessary
   await db
-    .update(calls)
-    .set({
-      transcript: null,
-      summary: null,
-      recordingUrl: null,
-      callerNumber: 'EXPIRED',
-      insightsRaw: null,
-      metadata: {},
-    })
+    .delete(calls)
     .where(
       sql`${calls.startedAt} < ${cutoffDate} AND ${calls.callerNumber} != 'EXPIRED' AND ${calls.callerNumber} != 'REDACTED'`,
     );
