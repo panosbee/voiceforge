@@ -39,6 +39,7 @@ import { supportChatRoutes } from './routes/support-chat.js';
 import { adminRoutes } from './routes/admin.js';
 import { registrationRoutes } from './routes/registration.js';
 import { widgetRoutes } from './routes/widget.js';
+import { taskRoutes, taskPublicRoutes } from './routes/tasks.js';
 
 // ── App Setup ────────────────────────────────────────────────────
 
@@ -142,6 +143,10 @@ app.route('/api/billing', billingRoutes);
 app.route('/api/gdpr', gdprRoutes);
 app.route('/api/kb-wizard', kbWizardRoutes);
 app.route('/api/support-chat', supportChatRoutes);
+app.route('/api/tasks', taskRoutes);
+
+// Public task confirmation (no auth — accessed from email links)
+app.route('/api/tasks', taskPublicRoutes);
 
 // ── Global Error Handler ─────────────────────────────────────────
 

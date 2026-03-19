@@ -23,7 +23,8 @@ import {
   INDUSTRY_TEMPLATES,
   type Industry,
 } from '@voiceforge/shared';
-import { X, BookOpen, Settings, Phone, Globe, Wand2, Code2, Copy, Check, Eye } from 'lucide-react';
+import { X, BookOpen, Settings, Phone, Globe, Wand2, Code2, Copy, Check, Eye, ClipboardList } from 'lucide-react';
+import { TaskEmailsEditor } from '@/components/task-emails-editor';
 import { toast } from 'sonner';
 import type { Agent, CreateAgentInput, ApiResponse } from '@voiceforge/shared';
 import { API_URL } from '@/lib/env';
@@ -43,7 +44,7 @@ const ttsOptions = ELEVENLABS_TTS_MODELS.map((m) => ({
   label: `${m.name} — ${m.description}`,
 }));
 
-type ModalTab = 'settings' | 'knowledge-base' | 'ai-wizard' | 'embed';
+type ModalTab = 'settings' | 'knowledge-base' | 'ai-wizard' | 'embed' | 'task-routing';
 
 export function AgentEditModal({ agentId, onClose, onSaved }: AgentEditModalProps) {
   const isEditing = !!agentId;
@@ -268,6 +269,17 @@ export function AgentEditModal({ agentId, onClose, onSaved }: AgentEditModalProp
             >
               <Code2 className="w-4 h-4" />
               {t.agents.embedTab}
+            </button>
+            <button
+              onClick={() => setActiveTab('task-routing')}
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
+                activeTab === 'task-routing'
+                  ? 'border-brand-500 text-brand-600'
+                  : 'border-transparent text-text-tertiary hover:text-text-secondary'
+              }`}
+            >
+              <ClipboardList className="w-4 h-4" />
+              Tasks
             </button>
           </div>
         )}
@@ -497,6 +509,9 @@ export function AgentEditModal({ agentId, onClose, onSaved }: AgentEditModalProp
               }}
             />
           </div>
+        ) : activeTab === 'task-routing' ? (
+          /* ── Task Routing Tab ── */
+          <TaskEmailsEditor agentId={agentId!} />
         ) : activeTab === 'embed' ? (
           /* ── Embed Widget Tab ── */
           <EmbedTabContent

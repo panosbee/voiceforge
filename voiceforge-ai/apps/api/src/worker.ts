@@ -11,6 +11,7 @@ import { calls, webhookEvents, auditLogs } from './db/schema/index.js';
 import { lte, sql } from 'drizzle-orm';
 import { env } from './config/env.js';
 import { runConversationSync } from './workers/conversation-sync.js';
+import { runTaskReminders } from './workers/task-reminders.js';
 
 const log = logger.child({ module: 'worker' });
 
@@ -69,6 +70,11 @@ const tasks: ScheduledTask[] = [
     name: 'conversation-sync',
     intervalMs: 2 * 60 * 1000, // Every 2 minutes — safety net
     handler: runConversationSync,
+  },
+  {
+    name: 'task-reminders',
+    intervalMs: 60 * 60 * 1000, // Every hour
+    handler: runTaskReminders,
   },
 ];
 

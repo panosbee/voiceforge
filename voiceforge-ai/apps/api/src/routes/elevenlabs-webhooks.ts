@@ -7,11 +7,14 @@
 import { Hono } from 'hono';
 import { eq, and, gte, lte, desc } from 'drizzle-orm';
 import { db } from '../db/connection.js';
-import { agents, calls, webhookEvents, appointments, customers, callerMemories } from '../db/schema/index.js';
+import { agents, calls, webhookEvents, appointments, customers, callerMemories, agentTaskEmails, tasks } from '../db/schema/index.js';
 import { createLogger } from '../config/logger.js';
 import * as elevenlabsService from '../services/elevenlabs.js';
-import { notifyCallCompleted } from '../services/email.js';
+import { notifyCallCompleted, sendTaskNotificationEmail, isEmailConfigured } from '../services/email.js';
 import { getTelephonyProvider } from '../services/telephony/index.js';
+import { extractTasksFromTranscript } from '../services/task-extraction.js';
+import { generateConfirmToken } from './tasks.js';
+import { env } from '../config/env.js';
 import { parseDateTimeInTimezone } from '../services/timezone.js';
 import { extractAppointmentFromTranscript } from '../services/transcript-parser.js';
 import { parseBusinessHours, generateSlots, isWorkingDay, formatBusinessHoursForDisplay, getBusinessHoursSummary } from '../services/business-hours.js';
@@ -321,6 +324,83 @@ elevenlabsWebhookRoutes.post('/post-conversation', async (c) => {
     }
 
     // ── Store Appointment if Booked — deduplicate with server tool ──
+    // ── Post-Call Task Extraction ───────────────────────────────
+    if (callRecord && transcriptText && isEmailConfigured()) {
+      try {
+        // Check if this agent has task email recipients configured
+        const taskEmailRecipients = await db.query.agentTaskEmails.findMany({
+          where: eq(agentTaskEmails.agentId, agent.id),
+          orderBy: [agentTaskEmails.sortOrder],
+        });
+
+        if (taskEmailRecipients.length > 0) {
+          const extraction = await extractTasksFromTranscript({
+            transcript: transcriptText,
+            agentName: agent.name,
+            roles: taskEmailRecipients.map((r) => ({
+              roleLabel: r.roleLabel,
+              roleDescription: r.roleDescription,
+            })),
+            callerPhone: callerNumber !== 'unknown' ? callerNumber : undefined,
+            language: agent.language,
+          });
+
+          if (extraction.hasTasks) {
+            for (const extractedTask of extraction.tasks) {
+              // Find the matching email recipient
+              const matchedRecipient = taskEmailRecipients.find(
+                (r) => r.roleLabel === extractedTask.matchedRole,
+              ) ?? taskEmailRecipients[0]!;
+
+              // Create task record
+              const taskId = crypto.randomUUID();
+              const confirmToken = generateConfirmToken(taskId);
+
+              await db.insert(tasks).values({
+                id: taskId,
+                customerId: agent.customerId,
+                agentId: agent.id,
+                callId: callRecord.id,
+                taskEmailId: matchedRecipient.id,
+                title: extractedTask.title,
+                description: extractedTask.description,
+                actionRequired: extractedTask.actionRequired,
+                assignedEmail: matchedRecipient.email,
+                assignedRole: matchedRecipient.roleLabel,
+                status: 'pending',
+                priority: extractedTask.priority as 'low' | 'normal' | 'high' | 'urgent',
+                confirmToken,
+                callerName: extractedTask.callerName,
+                callerPhone: extractedTask.callerPhone,
+              });
+
+              // Send task notification email
+              const confirmUrl = `${env.API_BASE_URL}/api/tasks/confirm/${taskId}?token=${confirmToken}`;
+              await sendTaskNotificationEmail({
+                to: matchedRecipient.email,
+                taskTitle: extractedTask.title,
+                taskDescription: extractedTask.description,
+                actionRequired: extractedTask.actionRequired,
+                priority: extractedTask.priority,
+                callerName: extractedTask.callerName,
+                callerPhone: extractedTask.callerPhone,
+                agentName: agent.name,
+                confirmUrl,
+              });
+
+              log.info(
+                { taskId, callId: callRecord.id, role: matchedRecipient.roleLabel, email: matchedRecipient.email },
+                'Post-call task created and notification sent',
+              );
+            }
+          }
+        }
+      } catch (taskErr) {
+        log.error({ error: taskErr, callId: callRecord?.id }, 'Post-call task extraction failed — non-blocking');
+      }
+    }
+
+    // ── Store Appointment if Booked ──
     if (appointmentBooked && callRecord) {
       try {
         const aptDate = appointmentDate;

@@ -589,3 +589,139 @@ export async function notifyCallCompleted(params: {
     log.error({ error: err, callId: params.callId }, 'Failed to send call summary email');
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// Post-Call Task Notification Email
+// Sent to department email with confirm link
+// ═══════════════════════════════════════════════════════════════════
+
+export async function sendTaskNotificationEmail(params: {
+  to: string;
+  taskTitle: string;
+  taskDescription: string;
+  actionRequired: string;
+  priority: string;
+  callerName: string | null;
+  callerPhone: string | null;
+  agentName: string;
+  confirmUrl: string;
+}): Promise<void> {
+  const priorityColors: Record<string, string> = {
+    urgent: '#ef4444', high: '#f59e0b', normal: '#3b82f6', low: '#6b7280',
+  };
+  const priorityLabels: Record<string, string> = {
+    urgent: '🔴 Επείγον', high: '🟡 Υψηλή', normal: '🔵 Κανονική', low: '⚪ Χαμηλή',
+  };
+  const pColor = priorityColors[params.priority] || '#3b82f6';
+  const pLabel = priorityLabels[params.priority] || params.priority;
+
+  await sendEmail({
+    to: params.to,
+    subject: `📋 Νέο Task: ${params.taskTitle} — ${params.agentName}`,
+    html: `
+      <!DOCTYPE html>
+      <html lang="el">
+      <head><meta charset="UTF-8"></head>
+      <body style="font-family:Inter,system-ui,sans-serif;background:#f8fafc;padding:40px 20px;">
+        <div style="max-width:560px;margin:0 auto;background:white;border-radius:12px;padding:40px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+          <div style="text-align:center;margin-bottom:32px;">
+            <div style="width:48px;height:48px;background:linear-gradient(135deg,#6366f1,#4f46e5);border-radius:12px;display:inline-flex;align-items:center;justify-content:center;">
+              <span style="font-size:24px;color:white;">📋</span>
+            </div>
+            <h1 style="font-size:24px;color:#1e293b;margin-top:16px;">Νέο Task</h1>
+            <span style="display:inline-block;background:${pColor}15;color:${pColor};font-size:12px;font-weight:600;padding:4px 12px;border-radius:20px;margin-top:8px;">
+              ${pLabel}
+            </span>
+          </div>
+
+          <h2 style="font-size:18px;color:#1e293b;margin:0 0 12px 0;">${escapeHtml(params.taskTitle)}</h2>
+          <p style="font-size:15px;color:#475569;line-height:1.6;margin:0 0 20px 0;">${escapeHtml(params.taskDescription)}</p>
+
+          <div style="background:#f1f5f9;border-radius:8px;padding:16px;margin:20px 0;">
+            <p style="font-size:13px;color:#64748b;margin:0 0 4px 0;font-weight:600;">Απαιτούμενη ενέργεια:</p>
+            <p style="font-size:14px;color:#1e293b;margin:0;">${escapeHtml(params.actionRequired)}</p>
+          </div>
+
+          <table style="width:100%;border-collapse:collapse;margin:20px 0;">
+            ${params.callerName ? `
+            <tr style="border-bottom:1px solid #e2e8f0;">
+              <td style="padding:10px 0;color:#64748b;font-size:14px;">Πελάτης</td>
+              <td style="padding:10px 0;color:#1e293b;font-size:14px;font-weight:600;text-align:right;">${escapeHtml(params.callerName)}</td>
+            </tr>` : ''}
+            ${params.callerPhone ? `
+            <tr style="border-bottom:1px solid #e2e8f0;">
+              <td style="padding:10px 0;color:#64748b;font-size:14px;">Τηλέφωνο</td>
+              <td style="padding:10px 0;color:#1e293b;font-size:14px;font-weight:600;text-align:right;">${escapeHtml(params.callerPhone)}</td>
+            </tr>` : ''}
+            <tr>
+              <td style="padding:10px 0;color:#64748b;font-size:14px;">AI Βοηθός</td>
+              <td style="padding:10px 0;color:#1e293b;font-size:14px;text-align:right;">${escapeHtml(params.agentName)}</td>
+            </tr>
+          </table>
+
+          <div style="text-align:center;margin-top:32px;">
+            <a href="${params.confirmUrl}" style="display:inline-block;background:#10b981;color:white;font-size:16px;font-weight:600;padding:14px 32px;border-radius:8px;text-decoration:none;">
+              ✅ Ολοκληρώθηκε
+            </a>
+            <p style="font-size:12px;color:#94a3b8;margin-top:12px;">
+              Πατήστε όταν ολοκληρωθεί η ενέργεια
+            </p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+    text: `Νέο Task: ${params.taskTitle}\n${params.taskDescription}\nΕνέργεια: ${params.actionRequired}\nΕπιβεβαίωση: ${params.confirmUrl}`,
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Task Reminder Email
+// Sent when a task is still pending after X hours
+// ═══════════════════════════════════════════════════════════════════
+
+export async function sendTaskReminderEmail(params: {
+  to: string;
+  taskTitle: string;
+  hoursElapsed: number;
+  reminderNumber: number;
+  confirmUrl: string;
+  agentName: string;
+}): Promise<void> {
+  const hours = Math.round(params.hoursElapsed);
+
+  await sendEmail({
+    to: params.to,
+    subject: `⏰ Υπενθύμιση: ${params.taskTitle} — Εκκρεμεί ${hours}+ ώρες`,
+    html: `
+      <!DOCTYPE html>
+      <html lang="el">
+      <head><meta charset="UTF-8"></head>
+      <body style="font-family:Inter,system-ui,sans-serif;background:#f8fafc;padding:40px 20px;">
+        <div style="max-width:560px;margin:0 auto;background:white;border-radius:12px;padding:40px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+          <div style="text-align:center;margin-bottom:24px;">
+            <span style="font-size:48px;">⏰</span>
+            <h1 style="font-size:22px;color:#f59e0b;margin-top:12px;">Εκκρεμές Task — ${hours} ώρες</h1>
+          </div>
+
+          <p style="font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+            Το task <strong>"${escapeHtml(params.taskTitle)}"</strong> από τον βοηθό <strong>${escapeHtml(params.agentName)}</strong>
+            παραμένει σε αναμονή εδώ και <strong>${hours} ώρες</strong>.
+          </p>
+
+          <p style="font-size:13px;color:#94a3b8;text-align:center;margin:4px 0 24px 0;">
+            Υπενθύμιση #${params.reminderNumber}
+          </p>
+
+          <div style="text-align:center;">
+            <a href="${params.confirmUrl}" style="display:inline-block;background:#10b981;color:white;font-size:16px;font-weight:600;padding:14px 32px;border-radius:8px;text-decoration:none;">
+              ✅ Ολοκληρώθηκε
+            </a>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+    text: `Υπενθύμιση: Task "${params.taskTitle}" εκκρεμεί ${hours}+ ώρες. Επιβεβαίωση: ${params.confirmUrl}`,
+  });
+}

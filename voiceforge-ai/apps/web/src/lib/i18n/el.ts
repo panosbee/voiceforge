@@ -213,6 +213,7 @@ export const el: Translations = {
       flows: 'Ροές',
       calls: 'Κλήσεις',
       calendar: 'Ημερολόγιο',
+      tasks: 'Εργασίες',
       analytics: 'Analytics',
       settings: 'Ρυθμίσεις',
     },

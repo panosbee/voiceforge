@@ -95,3 +95,19 @@ export {
   type IcalCachedEventSelect,
   type IcalCachedEventInsert,
 } from './ical-events';
+
+export {
+  agentTaskEmails,
+  agentTaskEmailsRelations,
+  type AgentTaskEmailSelect,
+  type AgentTaskEmailInsert,
+} from './task-emails';
+
+export {
+  tasks,
+  tasksRelations,
+  taskStatusEnum,
+  taskPriorityEnum,
+  type TaskSelect,
+  type TaskInsert,
+} from './tasks';

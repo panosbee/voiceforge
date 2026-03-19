@@ -152,6 +152,7 @@ export interface Translations {
       flows: string;
       calls: string;
       calendar: string;
+      tasks: string;
       analytics: string;
       settings: string;
     };

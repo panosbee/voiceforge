@@ -25,6 +25,7 @@ import {
   ChevronRight,
   GitBranch,
   CalendarDays,
+  ClipboardList,
 } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { toast } from 'sonner';
@@ -44,6 +45,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard/flows', labelKey: 'flows', icon: GitBranch, roles: ['expert'] },
   { href: '/dashboard/calls', labelKey: 'calls', icon: Phone },
   { href: '/dashboard/calendar', labelKey: 'calendar', icon: CalendarDays },
+  { href: '/dashboard/tasks', labelKey: 'tasks', icon: ClipboardList },
   { href: '/dashboard/analytics', labelKey: 'analytics', icon: BarChart3 },
   { href: '/dashboard/settings', labelKey: 'settings', icon: Settings },
 ];

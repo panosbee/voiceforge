@@ -213,6 +213,7 @@ export const en: Translations = {
       flows: 'Flows',
       calls: 'Calls',
       calendar: 'Calendar',
+      tasks: 'Tasks',
       analytics: 'Analytics',
       settings: 'Settings',
     },
