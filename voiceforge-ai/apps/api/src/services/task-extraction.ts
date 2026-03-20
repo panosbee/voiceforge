@@ -108,7 +108,7 @@ If there are NO actionable tasks, respond: {"tasks": []}`;
           { role: 'user', content: `Transcript:\n\n${params.transcript}` },
         ],
         temperature: 0.2,
-        max_tokens: 1000,
+        max_completion_tokens: 1000,
         response_format: { type: 'json_object' },
       }),
     });
