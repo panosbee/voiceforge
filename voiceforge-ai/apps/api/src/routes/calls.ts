@@ -738,6 +738,7 @@ callRoutes.post('/record-conversation', zValidator('json', recordConversationSch
         summary,
         sentiment: sentimentScore,
         appointmentBooked,
+        locale: customer.locale,
       });
     }
 
@@ -878,6 +879,7 @@ callRoutes.post('/record-conversation', zValidator('json', recordConversationSch
                   agentName: agent.name,
                   confirmUrl,
                   transcript: transcriptText,
+                  locale: customer.locale,
                 });
 
                 log.info(

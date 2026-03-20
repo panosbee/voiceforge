@@ -335,6 +335,7 @@ billingWebhookRoutes.post('/stripe', async (c) => {
               await sendPaymentFailedEmail({
                 to: failedCustomer.email,
                 ownerName: failedCustomer.ownerName,
+                locale: failedCustomer.locale,
               });
               log.info({ customerId: failedCustomer.id, to: failedCustomer.email }, 'Payment failed email sent');
             }

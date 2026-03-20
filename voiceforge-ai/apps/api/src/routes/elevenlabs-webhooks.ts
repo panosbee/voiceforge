@@ -302,6 +302,7 @@ elevenlabsWebhookRoutes.post('/post-conversation', async (c) => {
         summary,
         sentiment: sentimentScore,
         appointmentBooked,
+        locale: customer?.locale,
       });
     }
 
@@ -400,6 +401,7 @@ elevenlabsWebhookRoutes.post('/post-conversation', async (c) => {
                   agentName: agent.name,
                   confirmUrl,
                   transcript: transcriptText,
+                  locale: customer?.locale,
                 });
 
                 log.info(
@@ -876,10 +878,16 @@ elevenlabsWebhookRoutes.post('/server-tool', async (c) => {
               const { generateIcsInvite } = await import('../services/ics-generator.js');
               const { sendAppointmentInviteEmail } = await import('../services/email.js');
 
+              const isEn = customerRecord.locale?.startsWith('en');
+              const clientLabel = isEn ? 'Client' : 'Πελάτης';
+              const aptLabel = isEn ? 'Appointment' : 'Ραντεβού';
+              const svcLabel = isEn ? 'Service' : 'Υπηρεσία';
+              const phoneLabel = isEn ? 'Phone' : 'Τηλέφωνο';
+
               const endAt = new Date(scheduledAt.getTime() + (bhConfig.slotDurationMinutes || 30) * 60 * 1000);
               const icsContent = generateIcsInvite({
-                summary: `Ραντεβού: ${callerName ?? 'Πελάτης'} — ${customerRecord.businessName ?? 'VoiceForge'}`,
-                description: `${serviceType ? `Υπηρεσία: ${serviceType}\n` : ''}Τηλέφωνο: ${callerPhone ?? 'N/A'}\n${notes ?? ''}`.trim(),
+                summary: `${aptLabel}: ${callerName ?? clientLabel} — ${customerRecord.businessName ?? 'VoiceForge'}`,
+                description: `${serviceType ? `${svcLabel}: ${serviceType}\n` : ''}${phoneLabel}: ${callerPhone ?? 'N/A'}\n${notes ?? ''}`.trim(),
                 startAt: scheduledAt,
                 endAt,
                 organizerName: customerRecord.businessName ?? 'VoiceForge AI',
@@ -891,12 +899,13 @@ elevenlabsWebhookRoutes.post('/server-tool', async (c) => {
               sendAppointmentInviteEmail({
                 to: customerRecord.email,
                 businessName: customerRecord.businessName ?? 'VoiceForge AI',
-                callerName: callerName ?? 'Πελάτης',
+                callerName: callerName ?? (customerRecord.locale?.startsWith('en') ? 'Client' : 'Πελάτης'),
                 date,
                 time,
                 serviceType: serviceType ?? undefined,
                 notes: notes ?? undefined,
                 icsContent,
+                locale: customerRecord.locale,
               }).catch((err) => log.error({ err }, 'Failed to send appointment invite email'));
             }
           } catch (emailErr) {

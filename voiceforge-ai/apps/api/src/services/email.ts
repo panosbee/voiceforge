@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════
-// VoiceForge AI — Email Service (Resend)
-// Transactional emails: welcome, call summary, payment alerts.
+// VoiceForge AI — Email Service (Resend) — Bilingual (el/en)
+// Transactional emails: welcome, call summary, payment alerts,
+// task notifications, appointment invites, B2B licensing.
 // ═══════════════════════════════════════════════════════════════════
 
 import { env } from '../config/env.js';
@@ -10,6 +11,232 @@ const log = createLogger('email');
 
 const RESEND_API = 'https://api.resend.com/emails';
 const FROM_ADDRESS = env.EMAIL_FROM;
+
+// ── Locale helper ────────────────────────────────────────────────
+
+type EmailLocale = 'el' | 'en';
+
+/** Normalize DB locale (el-GR, en-US, etc.) to our simple el/en key */
+function toEmailLocale(locale?: string | null): EmailLocale {
+  if (!locale) return 'el';
+  return locale.startsWith('en') ? 'en' : 'el';
+}
+
+// ── Email i18n strings ───────────────────────────────────────────
+
+const i18n = {
+  el: {
+    // Common
+    needHelp: 'Αν χρειάζεστε βοήθεια, απαντήστε σε αυτό το email.',
+    goToDashboard: 'Μπείτε στο Dashboard →',
+    viewDetails: 'Δείτε λεπτομέρειες →',
+    viewInDashboard: 'Προβολή στο Dashboard →',
+    // Welcome
+    welcomeTitle: 'Καλώς ήρθατε!',
+    welcomeSubject: (name: string) => `Καλώς ήρθατε στο VoiceForge AI, ${name}!`,
+    welcomeGreeting: (name: string) => `Γεια σας <strong>${name}</strong>,`,
+    welcomeReady: (agentName: string, bizName: string) =>
+      `Ο AI βοηθός <strong>"${agentName}"</strong> για το <strong>"${bizName}"</strong> είναι έτοιμος!`,
+    welcomePhone: 'Αριθμός τηλεφώνου',
+    welcomeDesc: 'Ο βοηθός σας θα απαντά στις κλήσεις 24/7, θα κλείνει ραντεβού, και θα σας στέλνει περιλήψεις κάθε κλήσης.',
+    welcomeText: (agent: string, biz: string) =>
+      `Καλώς ήρθατε στο VoiceForge AI! Ο βοηθός "${agent}" για το "${biz}" είναι έτοιμος.`,
+    // Call summary
+    callSubject: (phone: string, dur: string) => `Νέα κλήση: ${phone} · ${dur} λεπτά`,
+    callTitle: 'Νέα Κλήση',
+    callAnswered: (agentName: string) => `Ο βοηθός <strong>${agentName}</strong> απάντησε`,
+    callCaller: 'Καλών',
+    callDuration: 'Διάρκεια',
+    callSummaryLabel: 'Περίληψη:',
+    callAppointment: '📅 Κλείστηκε ραντεβού',
+    callNoSummary: 'Δεν υπάρχει διαθέσιμη περίληψη.',
+    callText: (phone: string, dur: string, summary: string) =>
+      `Νέα κλήση από ${phone} (${dur}). Περίληψη: ${summary}`,
+    // Payment failed
+    paymentSubject: '⚠️ Αποτυχία πληρωμής — VoiceForge AI',
+    paymentTitle: '⚠️ Αποτυχία Πληρωμής',
+    paymentGreeting: (name: string) => `Γεια σας <strong>${name}</strong>,`,
+    paymentBody: 'Η τελευταία πληρωμή για τη συνδρομή σας στο VoiceForge AI δεν ολοκληρώθηκε. Παρακαλούμε ελέγξτε τα στοιχεία πληρωμής σας.',
+    paymentCta: 'Ενημέρωση Πληρωμής →',
+    paymentWarning: 'Αν η πληρωμή δεν ολοκληρωθεί εντός 7 ημερών, ο AI βοηθός σας θα σταματήσει να δέχεται κλήσεις.',
+    paymentText: 'Η πληρωμή για τη συνδρομή σας στο VoiceForge AI δεν ολοκληρώθηκε. Ελέγξτε τα στοιχεία πληρωμής στις ρυθμίσεις.',
+    // Registration (admin email — always Greek)
+    regSubject: (company: string, plan: string) => `🆕 Νέα Εγγραφή: ${company} — ${plan}`,
+    regTitle: '🆕 Νέα Εγγραφή Πελάτη',
+    regName: 'Ονοματεπώνυμο',
+    regCompany: 'Επωνυμία',
+    regAfm: 'ΑΦΜ',
+    regDoy: 'ΔΟΥ',
+    regPhone: 'Τηλέφωνο',
+    regAddress: 'Διεύθυνση',
+    regPlan: 'Πακέτο',
+    regDuration: 'Διάρκεια',
+    regDurationUnit: 'μήνες',
+    regTotal: 'Σύνολο',
+    regPendingTitle: '⏳ Αναμονή πληρωμής μέσω τραπεζικής κατάθεσης',
+    regPendingBody: (total: string) =>
+      `Ελέγξτε αν η κατάθεση ${total} έχει πιστωθεί στον λογαριασμό. Μετά εγκρίνετε και στείλτε κλειδί.`,
+    regAdminCta: 'Μετάβαση στο Admin Panel →',
+    // License key
+    licenseSubject: (company: string) => `🔑 Το κλειδί ενεργοποίησης για ${company} — VoiceForge AI`,
+    licenseTitle: 'Κλειδί Ενεργοποίησης',
+    licenseGreeting: (name: string) => `Γεια σας <strong>${name}</strong>,`,
+    licenseBody: 'Η πληρωμή σας επιβεβαιώθηκε! Χρησιμοποιήστε το παρακάτω κλειδί για να ενεργοποιήσετε τον λογαριασμό σας στο VoiceForge AI:',
+    licenseKeyLabel: 'Το κλειδί σας:',
+    licensePlan: 'Πακέτο',
+    licenseDuration: 'Διάρκεια',
+    licenseDurationUnit: 'μήνες',
+    licenseExpiry: 'Ισχύει μέχρι',
+    licenseCta: 'Ενεργοποίηση Λογαριασμού →',
+    licenseSteps: '<strong>Βήματα ενεργοποίησης:</strong><br/>1. Κάντε κλικ στο κουμπί «Ενεργοποίηση Λογαριασμού»<br/>2. Εισάγετε το κλειδί σας<br/>3. Ο λογαριασμός σας ενεργοποιείται αμέσως!',
+    // Appointment invite
+    aptSubject: (name: string, date: string, time: string) =>
+      `📅 Νέο Ραντεβού: ${name} — ${date} ${time}`,
+    aptTitle: 'Νέο Ραντεβού',
+    aptBody: (bizName: string) =>
+      `Κλείστηκε ραντεβού μέσω του AI βοηθού <strong>${bizName}</strong>.`,
+    aptClient: 'Πελάτης',
+    aptDate: 'Ημερομηνία',
+    aptTime: 'Ώρα',
+    aptService: 'Υπηρεσία',
+    aptNotes: 'Σημειώσεις',
+    aptIcsTitle: '📎 Συνημμένο αρχείο .ics',
+    aptIcsBody: 'Ανοίξτε το συνημμένο αρχείο invite.ics για να προσθέσετε το ραντεβού στο ημερολόγιό σας αυτόματα.',
+    aptText: (name: string, date: string, time: string, svc?: string) =>
+      `Νέο ραντεβού: ${name} — ${date} ${time}${svc ? ` (${svc})` : ''}. Ανοίξτε το .ics αρχείο για να το προσθέσετε στο ημερολόγιό σας.`,
+    // Task notification
+    taskSubject: (title: string, agent: string) => `📋 Νέο Task: ${title} — ${agent}`,
+    taskTitle: 'Νέο Task',
+    taskActionRequired: 'Απαιτούμενη ενέργεια:',
+    taskClient: 'Πελάτης',
+    taskPhone: 'Τηλέφωνο',
+    taskEmail: 'Email Πελάτη',
+    taskAgent: 'AI Βοηθός',
+    taskTranscript: '🎙️ Απομαγνητοφώνηση Συνομιλίας',
+    taskConfirmBtn: '✅ Ολοκληρώθηκε',
+    taskConfirmHint: 'Πατήστε όταν ολοκληρωθεί η ενέργεια',
+    taskText: (title: string, desc: string, action: string) =>
+      `Νέο Task: ${title}\n${desc}\nΕνέργεια: ${action}`,
+    priorityLabels: { urgent: '🔴 Επείγον', high: '🟡 Υψηλή', normal: '🔵 Κανονική', low: '⚪ Χαμηλή' } as Record<string, string>,
+    // Task reminder
+    reminderSubject: (title: string, hours: number) =>
+      `⏰ Υπενθύμιση: ${title} — Εκκρεμεί ${hours}+ ώρες`,
+    reminderTitle: (hours: number) => `Εκκρεμές Task — ${hours} ώρες`,
+    reminderBody: (title: string, agent: string, hours: number) =>
+      `Το task <strong>"${title}"</strong> από τον βοηθό <strong>${agent}</strong> παραμένει σε αναμονή εδώ και <strong>${hours} ώρες</strong>.`,
+    reminderNumber: (n: number) => `Υπενθύμιση #${n}`,
+    reminderText: (title: string, hours: number) =>
+      `Υπενθύμιση: Task "${title}" εκκρεμεί ${hours}+ ώρες.`,
+  },
+  en: {
+    // Common
+    needHelp: 'If you need help, reply to this email.',
+    goToDashboard: 'Go to Dashboard →',
+    viewDetails: 'View details →',
+    viewInDashboard: 'View in Dashboard →',
+    // Welcome
+    welcomeTitle: 'Welcome!',
+    welcomeSubject: (name: string) => `Welcome to VoiceForge AI, ${name}!`,
+    welcomeGreeting: (name: string) => `Hello <strong>${name}</strong>,`,
+    welcomeReady: (agentName: string, bizName: string) =>
+      `Your AI assistant <strong>"${agentName}"</strong> for <strong>"${bizName}"</strong> is ready!`,
+    welcomePhone: 'Phone number',
+    welcomeDesc: 'Your assistant will answer calls 24/7, book appointments, and send you a summary of every call.',
+    welcomeText: (agent: string, biz: string) =>
+      `Welcome to VoiceForge AI! Your assistant "${agent}" for "${biz}" is ready.`,
+    // Call summary
+    callSubject: (phone: string, dur: string) => `New call: ${phone} · ${dur} min`,
+    callTitle: 'New Call',
+    callAnswered: (agentName: string) => `Assistant <strong>${agentName}</strong> answered`,
+    callCaller: 'Caller',
+    callDuration: 'Duration',
+    callSummaryLabel: 'Summary:',
+    callAppointment: '📅 Appointment booked',
+    callNoSummary: 'No summary available.',
+    callText: (phone: string, dur: string, summary: string) =>
+      `New call from ${phone} (${dur}). Summary: ${summary}`,
+    // Payment failed
+    paymentSubject: '⚠️ Payment failed — VoiceForge AI',
+    paymentTitle: '⚠️ Payment Failed',
+    paymentGreeting: (name: string) => `Hello <strong>${name}</strong>,`,
+    paymentBody: 'Your latest subscription payment for VoiceForge AI was not completed. Please check your payment details.',
+    paymentCta: 'Update Payment →',
+    paymentWarning: 'If payment is not completed within 7 days, your AI assistant will stop receiving calls.',
+    paymentText: 'Your VoiceForge AI subscription payment was not completed. Check your payment details in settings.',
+    // Registration (admin email — always Greek, but defining for completeness)
+    regSubject: (company: string, plan: string) => `🆕 New Registration: ${company} — ${plan}`,
+    regTitle: '🆕 New Customer Registration',
+    regName: 'Full Name',
+    regCompany: 'Company',
+    regAfm: 'Tax ID',
+    regDoy: 'Tax Office',
+    regPhone: 'Phone',
+    regAddress: 'Address',
+    regPlan: 'Plan',
+    regDuration: 'Duration',
+    regDurationUnit: 'months',
+    regTotal: 'Total',
+    regPendingTitle: '⏳ Awaiting bank transfer payment',
+    regPendingBody: (total: string) =>
+      `Check if the ${total} deposit has been credited. Then approve and send the key.`,
+    regAdminCta: 'Go to Admin Panel →',
+    // License key
+    licenseSubject: (company: string) => `🔑 Your activation key for ${company} — VoiceForge AI`,
+    licenseTitle: 'Activation Key',
+    licenseGreeting: (name: string) => `Hello <strong>${name}</strong>,`,
+    licenseBody: 'Your payment has been confirmed! Use the key below to activate your VoiceForge AI account:',
+    licenseKeyLabel: 'Your key:',
+    licensePlan: 'Plan',
+    licenseDuration: 'Duration',
+    licenseDurationUnit: 'months',
+    licenseExpiry: 'Valid until',
+    licenseCta: 'Activate Account →',
+    licenseSteps: '<strong>Activation steps:</strong><br/>1. Click the "Activate Account" button<br/>2. Enter your key<br/>3. Your account is activated immediately!',
+    // Appointment invite
+    aptSubject: (name: string, date: string, time: string) =>
+      `📅 New Appointment: ${name} — ${date} ${time}`,
+    aptTitle: 'New Appointment',
+    aptBody: (bizName: string) =>
+      `An appointment was booked via the AI assistant of <strong>${bizName}</strong>.`,
+    aptClient: 'Client',
+    aptDate: 'Date',
+    aptTime: 'Time',
+    aptService: 'Service',
+    aptNotes: 'Notes',
+    aptIcsTitle: '📎 Attached .ics file',
+    aptIcsBody: 'Open the attached invite.ics file to add the appointment to your calendar automatically.',
+    aptText: (name: string, date: string, time: string, svc?: string) =>
+      `New appointment: ${name} — ${date} ${time}${svc ? ` (${svc})` : ''}. Open the .ics file to add it to your calendar.`,
+    // Task notification
+    taskSubject: (title: string, agent: string) => `📋 New Task: ${title} — ${agent}`,
+    taskTitle: 'New Task',
+    taskActionRequired: 'Action required:',
+    taskClient: 'Client',
+    taskPhone: 'Phone',
+    taskEmail: 'Client Email',
+    taskAgent: 'AI Assistant',
+    taskTranscript: '🎙️ Conversation Transcript',
+    taskConfirmBtn: '✅ Completed',
+    taskConfirmHint: 'Click when the action is completed',
+    taskText: (title: string, desc: string, action: string) =>
+      `New Task: ${title}\n${desc}\nAction: ${action}`,
+    priorityLabels: { urgent: '🔴 Urgent', high: '🟡 High', normal: '🔵 Normal', low: '⚪ Low' } as Record<string, string>,
+    // Task reminder
+    reminderSubject: (title: string, hours: number) =>
+      `⏰ Reminder: ${title} — Pending ${hours}+ hours`,
+    reminderTitle: (hours: number) => `Pending Task — ${hours} hours`,
+    reminderBody: (title: string, agent: string, hours: number) =>
+      `The task <strong>"${title}"</strong> from assistant <strong>${agent}</strong> has been pending for <strong>${hours} hours</strong>.`,
+    reminderNumber: (n: number) => `Reminder #${n}`,
+    reminderText: (title: string, hours: number) =>
+      `Reminder: Task "${title}" pending ${hours}+ hours.`,
+  },
+} as const;
+
+/** Get translations for a locale */
+function t(locale?: string | null) {
+  return i18n[toEmailLocale(locale)];
+}
 
 // ── HTML Sanitization — prevents XSS in transactional emails ─────
 
@@ -78,7 +305,7 @@ async function sendEmail(params: SendEmailParams): Promise<{ id: string }> {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// Pre-built Email Templates
+// Pre-built Email Templates (Bilingual el/en)
 // ═══════════════════════════════════════════════════════════════════
 
 /**
@@ -90,56 +317,37 @@ export async function sendWelcomeEmail(params: {
   businessName: string;
   agentName: string;
   phoneNumber?: string;
+  locale?: string;
 }): Promise<void> {
+  const s = t(params.locale);
+  const lang = toEmailLocale(params.locale);
   const phoneSection = params.phoneNumber
-    ? `<p style="font-size:16px;color:#333;">
-        📞 Αριθμός τηλεφώνου: <strong>${escapeHtml(params.phoneNumber)}</strong>
-       </p>`
+    ? `<p style="font-size:16px;color:#333;">📞 ${s.welcomePhone}: <strong>${escapeHtml(params.phoneNumber)}</strong></p>`
     : '';
 
   await sendEmail({
     to: params.to,
-    subject: `Καλώς ήρθατε στο VoiceForge AI, ${escapeHtml(params.ownerName)}!`,
-    html: `
-      <!DOCTYPE html>
-      <html lang="el">
-      <head><meta charset="UTF-8"></head>
+    subject: s.welcomeSubject(escapeHtml(params.ownerName)),
+    html: `<!DOCTYPE html><html lang="${lang}"><head><meta charset="UTF-8"></head>
       <body style="font-family:Inter,system-ui,sans-serif;background:#f8fafc;padding:40px 20px;">
         <div style="max-width:560px;margin:0 auto;background:white;border-radius:12px;padding:40px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
           <div style="text-align:center;margin-bottom:32px;">
             <div style="width:48px;height:48px;background:linear-gradient(135deg,#2563eb,#7c3aed);border-radius:12px;display:inline-flex;align-items:center;justify-content:center;">
               <span style="font-size:24px;color:white;">🎙️</span>
             </div>
-            <h1 style="font-size:24px;color:#1e293b;margin-top:16px;">Καλώς ήρθατε!</h1>
+            <h1 style="font-size:24px;color:#1e293b;margin-top:16px;">${s.welcomeTitle}</h1>
           </div>
-
-          <p style="font-size:16px;color:#333;line-height:1.6;">
-            Γεια σας <strong>${escapeHtml(params.ownerName)}</strong>,
-          </p>
-          <p style="font-size:16px;color:#333;line-height:1.6;">
-            Ο AI βοηθός <strong>“${escapeHtml(params.agentName)}”</strong> για το
-            <strong>“${escapeHtml(params.businessName)}”</strong> είναι έτοιμος!
-          </p>
+          <p style="font-size:16px;color:#333;line-height:1.6;">${s.welcomeGreeting(escapeHtml(params.ownerName))}</p>
+          <p style="font-size:16px;color:#333;line-height:1.6;">${s.welcomeReady(escapeHtml(params.agentName), escapeHtml(params.businessName))}</p>
           ${phoneSection}
-          <p style="font-size:16px;color:#333;line-height:1.6;">
-            Ο βοηθός σας θα απαντά στις κλήσεις 24/7, θα κλείνει ραντεβού,
-            και θα σας στέλνει περιλήψεις κάθε κλήσης.
-          </p>
-
+          <p style="font-size:16px;color:#333;line-height:1.6;">${s.welcomeDesc}</p>
           <div style="text-align:center;margin:32px 0;">
-            <a href="${env.FRONTEND_URL}/dashboard" style="background:linear-gradient(135deg,#2563eb,#7c3aed);color:white;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px;">
-              Μπείτε στο Dashboard →
-            </a>
+            <a href="${env.FRONTEND_URL}/dashboard" style="background:linear-gradient(135deg,#2563eb,#7c3aed);color:white;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px;">${s.goToDashboard}</a>
           </div>
-
-          <p style="font-size:14px;color:#64748b;line-height:1.6;">
-            Αν χρειάζεστε βοήθεια, απαντήστε σε αυτό το email.
-          </p>
+          <p style="font-size:14px;color:#64748b;line-height:1.6;">${s.needHelp}</p>
         </div>
-      </body>
-      </html>
-    `,
-    text: `Καλώς ήρθατε στο VoiceForge AI! Ο βοηθός "${params.agentName}" για το "${params.businessName}" είναι έτοιμος.`,
+      </body></html>`,
+    text: s.welcomeText(params.agentName, params.businessName),
   });
 }
 
@@ -156,66 +364,53 @@ export async function sendCallSummaryEmail(params: {
   sentiment?: number;
   appointmentBooked: boolean;
   callId: string;
+  locale?: string;
 }): Promise<void> {
+  const s = t(params.locale);
+  const lang = toEmailLocale(params.locale);
   const minutes = Math.floor(params.durationSeconds / 60);
   const seconds = params.durationSeconds % 60;
   const duration = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-
   const sentimentEmoji = params.sentiment
     ? params.sentiment >= 4 ? '😊' : params.sentiment >= 3 ? '😐' : '😟'
     : '';
-
   const appointmentBadge = params.appointmentBooked
-    ? '<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:4px;font-size:13px;">📅 Κλείστηκε ραντεβού</span>'
+    ? `<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:4px;font-size:13px;">${s.callAppointment}</span>`
     : '';
 
   await sendEmail({
     to: params.to,
-    subject: `Νέα κλήση: ${params.callerPhone} · ${duration} λεπτά`,
-    html: `
-      <!DOCTYPE html>
-      <html lang="el">
-      <head><meta charset="UTF-8"></head>
+    subject: s.callSubject(params.callerPhone, duration),
+    html: `<!DOCTYPE html><html lang="${lang}"><head><meta charset="UTF-8"></head>
       <body style="font-family:Inter,system-ui,sans-serif;background:#f8fafc;padding:40px 20px;">
         <div style="max-width:560px;margin:0 auto;background:white;border-radius:12px;padding:32px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-          <h2 style="font-size:20px;color:#1e293b;margin-bottom:4px;">📞 Νέα Κλήση</h2>
-          <p style="font-size:14px;color:#64748b;margin-top:0;">
-            Ο βοηθός <strong>${escapeHtml(params.agentName)}</strong> απάντησε
-          </p>
-
+          <h2 style="font-size:20px;color:#1e293b;margin-bottom:4px;">📞 ${s.callTitle}</h2>
+          <p style="font-size:14px;color:#64748b;margin-top:0;">${s.callAnswered(escapeHtml(params.agentName))}</p>
           <table style="width:100%;border-collapse:collapse;margin:20px 0;">
             <tr>
-              <td style="padding:8px 0;color:#64748b;font-size:14px;">Καλών</td>
+              <td style="padding:8px 0;color:#64748b;font-size:14px;">${s.callCaller}</td>
               <td style="padding:8px 0;color:#1e293b;font-size:14px;font-weight:600;text-align:right;">${escapeHtml(params.callerPhone)}</td>
             </tr>
             <tr style="border-top:1px solid #e2e8f0;">
-              <td style="padding:8px 0;color:#64748b;font-size:14px;">Διάρκεια</td>
+              <td style="padding:8px 0;color:#64748b;font-size:14px;">${s.callDuration}</td>
               <td style="padding:8px 0;color:#1e293b;font-size:14px;text-align:right;">${duration}</td>
             </tr>
-            ${params.sentiment ? `
-            <tr style="border-top:1px solid #e2e8f0;">
+            ${params.sentiment ? `<tr style="border-top:1px solid #e2e8f0;">
               <td style="padding:8px 0;color:#64748b;font-size:14px;">Sentiment</td>
               <td style="padding:8px 0;color:#1e293b;font-size:14px;text-align:right;">${sentimentEmoji} ${params.sentiment}/5</td>
             </tr>` : ''}
           </table>
-
           ${appointmentBadge ? `<div style="margin-bottom:16px;">${appointmentBadge}</div>` : ''}
-
           <div style="background:#f8fafc;border-radius:8px;padding:16px;margin:16px 0;">
-            <p style="font-size:13px;color:#64748b;margin:0 0 8px 0;font-weight:600;">Περίληψη:</p>
+            <p style="font-size:13px;color:#64748b;margin:0 0 8px 0;font-weight:600;">${s.callSummaryLabel}</p>
             <p style="font-size:14px;color:#334155;line-height:1.6;margin:0;">${escapeHtml(params.summary)}</p>
           </div>
-
           <div style="text-align:center;margin-top:24px;">
-            <a href="${env.FRONTEND_URL}/dashboard/calls/${params.callId}" style="color:#2563eb;font-size:14px;font-weight:600;text-decoration:none;">
-              Δείτε λεπτομέρειες →
-            </a>
+            <a href="${env.FRONTEND_URL}/dashboard/calls/${params.callId}" style="color:#2563eb;font-size:14px;font-weight:600;text-decoration:none;">${s.viewDetails}</a>
           </div>
         </div>
-      </body>
-      </html>
-    `,
-    text: `Νέα κλήση από ${escapeHtml(params.callerPhone)} (${duration}). Περίληψη: ${escapeHtml(params.summary)}`,
+      </body></html>`,
+    text: s.callText(escapeHtml(params.callerPhone), duration, escapeHtml(params.summary)),
   });
 }
 
@@ -225,37 +420,27 @@ export async function sendCallSummaryEmail(params: {
 export async function sendPaymentFailedEmail(params: {
   to: string;
   ownerName: string;
+  locale?: string;
 }): Promise<void> {
+  const s = t(params.locale);
+  const lang = toEmailLocale(params.locale);
+
   await sendEmail({
     to: params.to,
-    subject: '⚠️ Αποτυχία πληρωμής — VoiceForge AI',
-    html: `
-      <!DOCTYPE html>
-      <html lang="el">
-      <head><meta charset="UTF-8"></head>
+    subject: s.paymentSubject,
+    html: `<!DOCTYPE html><html lang="${lang}"><head><meta charset="UTF-8"></head>
       <body style="font-family:Inter,system-ui,sans-serif;background:#f8fafc;padding:40px 20px;">
         <div style="max-width:560px;margin:0 auto;background:white;border-radius:12px;padding:40px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-          <h2 style="font-size:20px;color:#dc2626;">⚠️ Αποτυχία Πληρωμής</h2>
-          <p style="font-size:16px;color:#333;line-height:1.6;">
-            Γεια σας <strong>${escapeHtml(params.ownerName)}</strong>,
-          </p>
-          <p style="font-size:16px;color:#333;line-height:1.6;">
-            Η τελευταία πληρωμή για τη συνδρομή σας στο VoiceForge AI δεν ολοκληρώθηκε.
-            Παρακαλούμε ελέγξτε τα στοιχεία πληρωμής σας.
-          </p>
+          <h2 style="font-size:20px;color:#dc2626;">${s.paymentTitle}</h2>
+          <p style="font-size:16px;color:#333;line-height:1.6;">${s.paymentGreeting(escapeHtml(params.ownerName))}</p>
+          <p style="font-size:16px;color:#333;line-height:1.6;">${s.paymentBody}</p>
           <div style="text-align:center;margin:32px 0;">
-            <a href="${env.FRONTEND_URL}/dashboard/settings" style="background:#dc2626;color:white;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px;">
-              Ενημέρωση Πληρωμής →
-            </a>
+            <a href="${env.FRONTEND_URL}/dashboard/settings" style="background:#dc2626;color:white;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px;">${s.paymentCta}</a>
           </div>
-          <p style="font-size:14px;color:#64748b;">
-            Αν η πληρωμή δεν ολοκληρωθεί εντός 7 ημερών, ο AI βοηθός σας θα σταματήσει να δέχεται κλήσεις.
-          </p>
+          <p style="font-size:14px;color:#64748b;">${s.paymentWarning}</p>
         </div>
-      </body>
-      </html>
-    `,
-    text: `Η πληρωμή για τη συνδρομή σας στο VoiceForge AI δεν ολοκληρώθηκε. Ελέγξτε τα στοιχεία πληρωμής στις ρυθμίσεις.`,
+      </body></html>`,
+    text: s.paymentText,
   });
 }
 
@@ -265,6 +450,7 @@ export async function sendPaymentFailedEmail(params: {
 
 /**
  * Send notification to admin about a new business registration.
+ * NOTE: Admin emails always use Greek locale.
  */
 export async function sendRegistrationNotificationEmail(params: {
   firstName: string;
@@ -278,6 +464,8 @@ export async function sendRegistrationNotificationEmail(params: {
   plan: string;
   durationMonths: number;
 }): Promise<void> {
+  const s = t('el'); // Admin email — always Greek
+
   const planLabels: Record<string, string> = {
     basic: 'Basic — €200/μήνα',
     pro: 'Pro — €400/μήνα',
@@ -288,23 +476,18 @@ export async function sendRegistrationNotificationEmail(params: {
         { basic: 200, pro: 400, enterprise: 999 }[params.plan] ?? 0
       ) * params.durationMonths}`;
 
-  // Admin email — in production, set this via env var
   const adminEmail = env.ADMIN_EMAIL;
 
   await sendEmail({
     to: adminEmail,
-    subject: `🆕 Νέα Εγγραφή: ${escapeHtml(params.companyName)} — ${planLabels[params.plan] || params.plan}`,
-    html: `
-      <!DOCTYPE html>
-      <html lang="el">
-      <head><meta charset="UTF-8"></head>
+    subject: s.regSubject(escapeHtml(params.companyName), planLabels[params.plan] || params.plan),
+    html: `<!DOCTYPE html><html lang="el"><head><meta charset="UTF-8"></head>
       <body style="font-family:Inter,system-ui,sans-serif;background:#f8fafc;padding:40px 20px;">
         <div style="max-width:600px;margin:0 auto;background:white;border-radius:12px;padding:40px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-          <h1 style="font-size:22px;color:#1e293b;margin-bottom:24px;">🆕 Νέα Εγγραφή Πελάτη</h1>
-
+          <h1 style="font-size:22px;color:#1e293b;margin-bottom:24px;">${s.regTitle}</h1>
           <table style="width:100%;border-collapse:collapse;">
             <tr style="border-bottom:1px solid #e2e8f0;">
-              <td style="padding:10px 0;color:#64748b;font-size:14px;width:140px;">Ονοματεπώνυμο</td>
+              <td style="padding:10px 0;color:#64748b;font-size:14px;width:140px;">${s.regName}</td>
               <td style="padding:10px 0;color:#1e293b;font-size:14px;font-weight:600;">${escapeHtml(params.firstName)} ${escapeHtml(params.lastName)}</td>
             </tr>
             <tr style="border-bottom:1px solid #e2e8f0;">
@@ -312,58 +495,48 @@ export async function sendRegistrationNotificationEmail(params: {
               <td style="padding:10px 0;color:#1e293b;font-size:14px;">${escapeHtml(params.email)}</td>
             </tr>
             <tr style="border-bottom:1px solid #e2e8f0;">
-              <td style="padding:10px 0;color:#64748b;font-size:14px;">Επωνυμία</td>
+              <td style="padding:10px 0;color:#64748b;font-size:14px;">${s.regCompany}</td>
               <td style="padding:10px 0;color:#1e293b;font-size:14px;font-weight:600;">${escapeHtml(params.companyName)}</td>
             </tr>
             <tr style="border-bottom:1px solid #e2e8f0;">
-              <td style="padding:10px 0;color:#64748b;font-size:14px;">ΑΦΜ</td>
+              <td style="padding:10px 0;color:#64748b;font-size:14px;">${s.regAfm}</td>
               <td style="padding:10px 0;color:#1e293b;font-size:14px;">${escapeHtml(params.afm)}</td>
             </tr>
             <tr style="border-bottom:1px solid #e2e8f0;">
-              <td style="padding:10px 0;color:#64748b;font-size:14px;">ΔΟΥ</td>
+              <td style="padding:10px 0;color:#64748b;font-size:14px;">${s.regDoy}</td>
               <td style="padding:10px 0;color:#1e293b;font-size:14px;">${escapeHtml(params.doy)}</td>
             </tr>
             <tr style="border-bottom:1px solid #e2e8f0;">
-              <td style="padding:10px 0;color:#64748b;font-size:14px;">Τηλέφωνο</td>
+              <td style="padding:10px 0;color:#64748b;font-size:14px;">${s.regPhone}</td>
               <td style="padding:10px 0;color:#1e293b;font-size:14px;">${escapeHtml(params.phone)}</td>
             </tr>
             <tr style="border-bottom:1px solid #e2e8f0;">
-              <td style="padding:10px 0;color:#64748b;font-size:14px;">Διεύθυνση</td>
+              <td style="padding:10px 0;color:#64748b;font-size:14px;">${s.regAddress}</td>
               <td style="padding:10px 0;color:#1e293b;font-size:14px;">${escapeHtml(params.businessAddress)}</td>
             </tr>
             <tr style="border-bottom:1px solid #e2e8f0;">
-              <td style="padding:10px 0;color:#64748b;font-size:14px;">Πακέτο</td>
+              <td style="padding:10px 0;color:#64748b;font-size:14px;">${s.regPlan}</td>
               <td style="padding:10px 0;color:#2563eb;font-size:14px;font-weight:600;">${planLabels[params.plan] || escapeHtml(params.plan)}</td>
             </tr>
             <tr style="border-bottom:1px solid #e2e8f0;">
-              <td style="padding:10px 0;color:#64748b;font-size:14px;">Διάρκεια</td>
-              <td style="padding:10px 0;color:#1e293b;font-size:14px;">${params.durationMonths} μήνες</td>
+              <td style="padding:10px 0;color:#64748b;font-size:14px;">${s.regDuration}</td>
+              <td style="padding:10px 0;color:#1e293b;font-size:14px;">${params.durationMonths} ${s.regDurationUnit}</td>
             </tr>
             <tr>
-              <td style="padding:10px 0;color:#64748b;font-size:14px;">Σύνολο</td>
+              <td style="padding:10px 0;color:#64748b;font-size:14px;">${s.regTotal}</td>
               <td style="padding:10px 0;color:#16a34a;font-size:16px;font-weight:700;">${totalPrice}</td>
             </tr>
           </table>
-
           <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:16px;margin-top:24px;">
-            <p style="font-size:14px;color:#92400e;margin:0;font-weight:600;">
-              ⏳ Αναμονή πληρωμής μέσω τραπεζικής κατάθεσης
-            </p>
-            <p style="font-size:13px;color:#92400e;margin:8px 0 0 0;">
-              Ελέγξτε αν η κατάθεση ${totalPrice} έχει πιστωθεί στον λογαριασμό. Μετά εγκρίνετε και στείλτε κλειδί.
-            </p>
+            <p style="font-size:14px;color:#92400e;margin:0;font-weight:600;">${s.regPendingTitle}</p>
+            <p style="font-size:13px;color:#92400e;margin:8px 0 0 0;">${s.regPendingBody(totalPrice)}</p>
           </div>
-
           <div style="text-align:center;margin-top:24px;">
-            <a href="${env.FRONTEND_URL}/admin" style="background:linear-gradient(135deg,#2563eb,#7c3aed);color:white;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px;">
-              Μετάβαση στο Admin Panel →
-            </a>
+            <a href="${env.FRONTEND_URL}/admin" style="background:linear-gradient(135deg,#2563eb,#7c3aed);color:white;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px;">${s.regAdminCta}</a>
           </div>
         </div>
-      </body>
-      </html>
-    `,
-    text: `Νέα εγγραφή: ${params.companyName} (${params.firstName} ${params.lastName}) — ${planLabels[params.plan] || params.plan}, ${params.durationMonths} μήνες, Σύνολο: ${totalPrice}`,
+      </body></html>`,
+    text: `New registration: ${params.companyName} (${params.firstName} ${params.lastName}) — ${planLabels[params.plan] || params.plan}, ${params.durationMonths} months, Total: ${totalPrice}`,
   });
 }
 
@@ -378,88 +551,58 @@ export async function sendLicenseKeyEmail(params: {
   plan: string;
   durationMonths: number;
   expiresAt: Date;
+  locale?: string;
 }): Promise<void> {
-  const planLabels: Record<string, string> = {
-    basic: 'Basic',
-    pro: 'Pro',
-    enterprise: 'Enterprise',
-  };
-
-  const formattedExpiry = params.expiresAt.toLocaleDateString('el-GR', {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
+  const s = t(params.locale);
+  const lang = toEmailLocale(params.locale);
+  const planLabels: Record<string, string> = { basic: 'Basic', pro: 'Pro', enterprise: 'Enterprise' };
+  const dateLocale = lang === 'el' ? 'el-GR' : 'en-US';
+  const formattedExpiry = params.expiresAt.toLocaleDateString(dateLocale, {
+    day: '2-digit', month: 'long', year: 'numeric',
   });
 
   await sendEmail({
     to: params.to,
-    subject: `🔑 Το κλειδί ενεργοποίησης για ${escapeHtml(params.companyName)} — VoiceForge AI`,
-    html: `
-      <!DOCTYPE html>
-      <html lang="el">
-      <head><meta charset="UTF-8"></head>
+    subject: s.licenseSubject(escapeHtml(params.companyName)),
+    html: `<!DOCTYPE html><html lang="${lang}"><head><meta charset="UTF-8"></head>
       <body style="font-family:Inter,system-ui,sans-serif;background:#f8fafc;padding:40px 20px;">
         <div style="max-width:560px;margin:0 auto;background:white;border-radius:12px;padding:40px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
           <div style="text-align:center;margin-bottom:32px;">
             <div style="width:48px;height:48px;background:linear-gradient(135deg,#2563eb,#7c3aed);border-radius:12px;display:inline-flex;align-items:center;justify-content:center;">
               <span style="font-size:24px;color:white;">🔑</span>
             </div>
-            <h1 style="font-size:24px;color:#1e293b;margin-top:16px;">Κλειδί Ενεργοποίησης</h1>
+            <h1 style="font-size:24px;color:#1e293b;margin-top:16px;">${s.licenseTitle}</h1>
           </div>
-
-          <p style="font-size:16px;color:#333;line-height:1.6;">
-            Γεια σας <strong>${escapeHtml(params.firstName)}</strong>,
-          </p>
-          <p style="font-size:16px;color:#333;line-height:1.6;">
-            Η πληρωμή σας επιβεβαιώθηκε! Χρησιμοποιήστε το παρακάτω κλειδί για να ενεργοποιήσετε
-            τον λογαριασμό σας στο VoiceForge AI:
-          </p>
-
+          <p style="font-size:16px;color:#333;line-height:1.6;">${s.licenseGreeting(escapeHtml(params.firstName))}</p>
+          <p style="font-size:16px;color:#333;line-height:1.6;">${s.licenseBody}</p>
           <div style="background:linear-gradient(135deg,#eff6ff,#f0fdf4);border:2px dashed #2563eb;border-radius:12px;padding:24px;text-align:center;margin:24px 0;">
-            <p style="font-size:13px;color:#64748b;margin:0 0 8px 0;">Το κλειδί σας:</p>
-            <p style="font-size:28px;color:#1e293b;font-weight:800;letter-spacing:3px;margin:0;font-family:monospace;">
-              ${escapeHtml(params.licenseKey)}
-            </p>
+            <p style="font-size:13px;color:#64748b;margin:0 0 8px 0;">${s.licenseKeyLabel}</p>
+            <p style="font-size:28px;color:#1e293b;font-weight:800;letter-spacing:3px;margin:0;font-family:monospace;">${escapeHtml(params.licenseKey)}</p>
           </div>
-
           <table style="width:100%;border-collapse:collapse;margin:20px 0;">
             <tr style="border-bottom:1px solid #e2e8f0;">
-              <td style="padding:8px 0;color:#64748b;font-size:14px;">Πακέτο</td>
+              <td style="padding:8px 0;color:#64748b;font-size:14px;">${s.licensePlan}</td>
               <td style="padding:8px 0;color:#2563eb;font-size:14px;font-weight:600;text-align:right;">${planLabels[params.plan] || escapeHtml(params.plan)}</td>
             </tr>
             <tr style="border-bottom:1px solid #e2e8f0;">
-              <td style="padding:8px 0;color:#64748b;font-size:14px;">Διάρκεια</td>
-              <td style="padding:8px 0;color:#1e293b;font-size:14px;text-align:right;">${params.durationMonths} μήνες</td>
+              <td style="padding:8px 0;color:#64748b;font-size:14px;">${s.licenseDuration}</td>
+              <td style="padding:8px 0;color:#1e293b;font-size:14px;text-align:right;">${params.durationMonths} ${s.licenseDurationUnit}</td>
             </tr>
             <tr>
-              <td style="padding:8px 0;color:#64748b;font-size:14px;">Ισχύει μέχρι</td>
+              <td style="padding:8px 0;color:#64748b;font-size:14px;">${s.licenseExpiry}</td>
               <td style="padding:8px 0;color:#1e293b;font-size:14px;font-weight:600;text-align:right;">${formattedExpiry}</td>
             </tr>
           </table>
-
           <div style="text-align:center;margin:32px 0;">
-            <a href="${env.FRONTEND_URL}/activate" style="background:linear-gradient(135deg,#2563eb,#7c3aed);color:white;padding:14px 40px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px;">
-              Ενεργοποίηση Λογαριασμού →
-            </a>
+            <a href="${env.FRONTEND_URL}/activate" style="background:linear-gradient(135deg,#2563eb,#7c3aed);color:white;padding:14px 40px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px;">${s.licenseCta}</a>
           </div>
-
           <div style="background:#f8fafc;border-radius:8px;padding:16px;margin-top:16px;">
-            <p style="font-size:13px;color:#64748b;margin:0;line-height:1.6;">
-              <strong>Βήματα ενεργοποίησης:</strong><br/>
-              1. Κάντε κλικ στο κουμπί «Ενεργοποίηση Λογαριασμού»<br/>
-              2. Εισάγετε το κλειδί σας<br/>
-              3. Ο λογαριασμός σας ενεργοποιείται αμέσως!
-            </p>
+            <p style="font-size:13px;color:#64748b;margin:0;line-height:1.6;">${s.licenseSteps}</p>
           </div>
-
-          <p style="font-size:14px;color:#64748b;line-height:1.6;margin-top:24px;">
-            Αν χρειάζεστε βοήθεια, απαντήστε σε αυτό το email.
-          </p>
+          <p style="font-size:14px;color:#64748b;line-height:1.6;margin-top:24px;">${s.needHelp}</p>
         </div>
-      </body>
-      </html>
-    `,
-    text: `Κλειδί ενεργοποίησης VoiceForge AI: ${params.licenseKey} — Πακέτο: ${planLabels[params.plan] || params.plan}, Διάρκεια: ${params.durationMonths} μήνες, Ισχύει μέχρι: ${formattedExpiry}. Ενεργοποιήστε στο: ${env.FRONTEND_URL}/activate`,
+      </body></html>`,
+    text: `${s.licenseTitle}: ${params.licenseKey} — ${planLabels[params.plan] || params.plan}, ${params.durationMonths} ${s.licenseDurationUnit}, ${s.licenseExpiry}: ${formattedExpiry}`,
   });
 }
 
@@ -467,92 +610,67 @@ export async function sendLicenseKeyEmail(params: {
 // Appointment Invite Email (with .ics attachment)
 // ═══════════════════════════════════════════════════════════════════
 
-/**
- * Send appointment confirmation email with .ics calendar invite attachment.
- * The .ics file is auto-accepted by most calendar apps (Google, Outlook, Apple).
- */
 export async function sendAppointmentInviteEmail(params: {
   to: string;
   businessName: string;
   callerName: string;
-  date: string;       // YYYY-MM-DD
-  time: string;       // HH:MM
+  date: string;
+  time: string;
   serviceType?: string;
   notes?: string;
-  icsContent: string; // Generated .ics file content
+  icsContent: string;
+  locale?: string;
 }): Promise<void> {
+  const s = t(params.locale);
+  const lang = toEmailLocale(params.locale);
   const icsBase64 = Buffer.from(params.icsContent, 'utf-8').toString('base64');
 
   await sendEmail({
     to: params.to,
-    subject: `📅 Νέο Ραντεβού: ${escapeHtml(params.callerName)} — ${params.date} ${params.time}`,
-    html: `
-      <!DOCTYPE html>
-      <html lang="el">
-      <head><meta charset="UTF-8"></head>
+    subject: s.aptSubject(escapeHtml(params.callerName), params.date, params.time),
+    html: `<!DOCTYPE html><html lang="${lang}"><head><meta charset="UTF-8"></head>
       <body style="font-family:Inter,system-ui,sans-serif;background:#f8fafc;padding:40px 20px;">
         <div style="max-width:560px;margin:0 auto;background:white;border-radius:12px;padding:40px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
           <div style="text-align:center;margin-bottom:32px;">
             <div style="width:48px;height:48px;background:linear-gradient(135deg,#f59e0b,#d97706);border-radius:12px;display:inline-flex;align-items:center;justify-content:center;">
               <span style="font-size:24px;color:white;">📅</span>
             </div>
-            <h1 style="font-size:24px;color:#1e293b;margin-top:16px;">Νέο Ραντεβού</h1>
+            <h1 style="font-size:24px;color:#1e293b;margin-top:16px;">${s.aptTitle}</h1>
           </div>
-
-          <p style="font-size:16px;color:#333;line-height:1.6;">
-            Κλείστηκε ραντεβού μέσω του AI βοηθού <strong>${escapeHtml(params.businessName)}</strong>.
-          </p>
-
+          <p style="font-size:16px;color:#333;line-height:1.6;">${s.aptBody(escapeHtml(params.businessName))}</p>
           <table style="width:100%;border-collapse:collapse;margin:20px 0;">
             <tr style="border-bottom:1px solid #e2e8f0;">
-              <td style="padding:10px 0;color:#64748b;font-size:14px;">Πελάτης</td>
+              <td style="padding:10px 0;color:#64748b;font-size:14px;">${s.aptClient}</td>
               <td style="padding:10px 0;color:#1e293b;font-size:14px;font-weight:600;text-align:right;">${escapeHtml(params.callerName)}</td>
             </tr>
             <tr style="border-bottom:1px solid #e2e8f0;">
-              <td style="padding:10px 0;color:#64748b;font-size:14px;">Ημερομηνία</td>
+              <td style="padding:10px 0;color:#64748b;font-size:14px;">${s.aptDate}</td>
               <td style="padding:10px 0;color:#1e293b;font-size:14px;font-weight:600;text-align:right;">${escapeHtml(params.date)}</td>
             </tr>
             <tr style="border-bottom:1px solid #e2e8f0;">
-              <td style="padding:10px 0;color:#64748b;font-size:14px;">Ώρα</td>
+              <td style="padding:10px 0;color:#64748b;font-size:14px;">${s.aptTime}</td>
               <td style="padding:10px 0;color:#2563eb;font-size:14px;font-weight:700;text-align:right;">${escapeHtml(params.time)}</td>
             </tr>
-            ${params.serviceType ? `
-            <tr style="border-bottom:1px solid #e2e8f0;">
-              <td style="padding:10px 0;color:#64748b;font-size:14px;">Υπηρεσία</td>
+            ${params.serviceType ? `<tr style="border-bottom:1px solid #e2e8f0;">
+              <td style="padding:10px 0;color:#64748b;font-size:14px;">${s.aptService}</td>
               <td style="padding:10px 0;color:#1e293b;font-size:14px;text-align:right;">${escapeHtml(params.serviceType)}</td>
             </tr>` : ''}
-            ${params.notes ? `
-            <tr>
-              <td style="padding:10px 0;color:#64748b;font-size:14px;">Σημειώσεις</td>
+            ${params.notes ? `<tr>
+              <td style="padding:10px 0;color:#64748b;font-size:14px;">${s.aptNotes}</td>
               <td style="padding:10px 0;color:#1e293b;font-size:14px;text-align:right;">${escapeHtml(params.notes)}</td>
             </tr>` : ''}
           </table>
-
           <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px;margin:20px 0;">
-            <p style="font-size:14px;color:#1d4ed8;margin:0;font-weight:600;">
-              📎 Συνημμένο αρχείο .ics
-            </p>
-            <p style="font-size:13px;color:#3b82f6;margin:8px 0 0 0;">
-              Ανοίξτε το συνημμένο αρχείο invite.ics για να προσθέσετε το ραντεβού στο ημερολόγιό σας αυτόματα.
-            </p>
+            <p style="font-size:14px;color:#1d4ed8;margin:0;font-weight:600;">${s.aptIcsTitle}</p>
+            <p style="font-size:13px;color:#3b82f6;margin:8px 0 0 0;">${s.aptIcsBody}</p>
           </div>
-
           <div style="text-align:center;margin-top:24px;">
-            <a href="${env.FRONTEND_URL}/dashboard/calendar" style="color:#2563eb;font-size:14px;font-weight:600;text-decoration:none;">
-              Προβολή στο Dashboard →
-            </a>
+            <a href="${env.FRONTEND_URL}/dashboard/calendar" style="color:#2563eb;font-size:14px;font-weight:600;text-decoration:none;">${s.viewInDashboard}</a>
           </div>
         </div>
-      </body>
-      </html>
-    `,
-    text: `Νέο ραντεβού: ${params.callerName} — ${params.date} ${params.time}${params.serviceType ? ` (${params.serviceType})` : ''}. Ανοίξτε το .ics αρχείο για να το προσθέσετε στο ημερολόγιό σας.`,
-    attachments: [
-      {
-        filename: 'invite.ics',
-        content: icsBase64,
-      },
-    ],
+      </body></html>`,
+    text: s.aptText(params.callerName, params.date, params.time, params.serviceType),
+    attachments: [{ filename: 'invite.ics', content: icsBase64 }],
   });
 }
 
@@ -570,8 +688,10 @@ export async function notifyCallCompleted(params: {
   summary: string | null;
   sentiment: number | null;
   appointmentBooked: boolean;
+  locale?: string;
 }): Promise<void> {
   if (!isEmailConfigured()) return;
+  const s = t(params.locale);
   try {
     await sendCallSummaryEmail({
       to: params.customerEmail,
@@ -579,10 +699,11 @@ export async function notifyCallCompleted(params: {
       callerPhone: params.callerPhone,
       agentName: params.agentName,
       durationSeconds: params.durationSeconds,
-      summary: params.summary ?? 'Δεν υπάρχει διαθέσιμη περίληψη.',
+      summary: params.summary ?? s.callNoSummary,
       sentiment: params.sentiment ?? undefined,
       appointmentBooked: params.appointmentBooked,
       callId: params.callId,
+      locale: params.locale,
     });
     log.info({ callId: params.callId, to: params.customerEmail }, 'Call summary email sent');
   } catch (err) {
@@ -592,7 +713,6 @@ export async function notifyCallCompleted(params: {
 
 // ═══════════════════════════════════════════════════════════════════
 // Post-Call Task Notification Email
-// Sent to department email with confirm link
 // ═══════════════════════════════════════════════════════════════════
 
 export async function sendTaskNotificationEmail(params: {
@@ -607,94 +727,73 @@ export async function sendTaskNotificationEmail(params: {
   agentName: string;
   confirmUrl: string;
   transcript?: string | null;
+  locale?: string;
 }): Promise<void> {
+  const s = t(params.locale);
+  const lang = toEmailLocale(params.locale);
   const priorityColors: Record<string, string> = {
     urgent: '#ef4444', high: '#f59e0b', normal: '#3b82f6', low: '#6b7280',
   };
-  const priorityLabels: Record<string, string> = {
-    urgent: '🔴 Επείγον', high: '🟡 Υψηλή', normal: '🔵 Κανονική', low: '⚪ Χαμηλή',
-  };
   const pColor = priorityColors[params.priority] || '#3b82f6';
-  const pLabel = priorityLabels[params.priority] || params.priority;
+  const pLabel = s.priorityLabels[params.priority] || params.priority;
 
   await sendEmail({
     to: params.to,
-    subject: `📋 Νέο Task: ${params.taskTitle} — ${params.agentName}`,
-    html: `
-      <!DOCTYPE html>
-      <html lang="el">
-      <head><meta charset="UTF-8"></head>
+    subject: s.taskSubject(params.taskTitle, params.agentName),
+    html: `<!DOCTYPE html><html lang="${lang}"><head><meta charset="UTF-8"></head>
       <body style="font-family:Inter,system-ui,sans-serif;background:#f8fafc;padding:40px 20px;">
         <div style="max-width:560px;margin:0 auto;background:white;border-radius:12px;padding:40px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
           <div style="text-align:center;margin-bottom:32px;">
             <div style="width:48px;height:48px;background:linear-gradient(135deg,#6366f1,#4f46e5);border-radius:12px;display:inline-flex;align-items:center;justify-content:center;">
               <span style="font-size:24px;color:white;">📋</span>
             </div>
-            <h1 style="font-size:24px;color:#1e293b;margin-top:16px;">Νέο Task</h1>
-            <span style="display:inline-block;background:${pColor}15;color:${pColor};font-size:12px;font-weight:600;padding:4px 12px;border-radius:20px;margin-top:8px;">
-              ${pLabel}
-            </span>
+            <h1 style="font-size:24px;color:#1e293b;margin-top:16px;">${s.taskTitle}</h1>
+            <span style="display:inline-block;background:${pColor}15;color:${pColor};font-size:12px;font-weight:600;padding:4px 12px;border-radius:20px;margin-top:8px;">${pLabel}</span>
           </div>
-
           <h2 style="font-size:18px;color:#1e293b;margin:0 0 12px 0;">${escapeHtml(params.taskTitle)}</h2>
           <p style="font-size:15px;color:#475569;line-height:1.6;margin:0 0 20px 0;">${escapeHtml(params.taskDescription)}</p>
-
           <div style="background:#f1f5f9;border-radius:8px;padding:16px;margin:20px 0;">
-            <p style="font-size:13px;color:#64748b;margin:0 0 4px 0;font-weight:600;">Απαιτούμενη ενέργεια:</p>
+            <p style="font-size:13px;color:#64748b;margin:0 0 4px 0;font-weight:600;">${s.taskActionRequired}</p>
             <p style="font-size:14px;color:#1e293b;margin:0;">${escapeHtml(params.actionRequired)}</p>
           </div>
-
           <table style="width:100%;border-collapse:collapse;margin:20px 0;">
-            ${params.callerName ? `
-            <tr style="border-bottom:1px solid #e2e8f0;">
-              <td style="padding:10px 0;color:#64748b;font-size:14px;">Πελάτης</td>
+            ${params.callerName ? `<tr style="border-bottom:1px solid #e2e8f0;">
+              <td style="padding:10px 0;color:#64748b;font-size:14px;">${s.taskClient}</td>
               <td style="padding:10px 0;color:#1e293b;font-size:14px;font-weight:600;text-align:right;">${escapeHtml(params.callerName)}</td>
             </tr>` : ''}
-            ${params.callerPhone ? `
-            <tr style="border-bottom:1px solid #e2e8f0;">
-              <td style="padding:10px 0;color:#64748b;font-size:14px;">Τηλέφωνο</td>
+            ${params.callerPhone ? `<tr style="border-bottom:1px solid #e2e8f0;">
+              <td style="padding:10px 0;color:#64748b;font-size:14px;">${s.taskPhone}</td>
               <td style="padding:10px 0;color:#1e293b;font-size:14px;font-weight:600;text-align:right;">${escapeHtml(params.callerPhone)}</td>
             </tr>` : ''}
-            ${params.callerEmail ? `
-            <tr style="border-bottom:1px solid #e2e8f0;">
-              <td style="padding:10px 0;color:#64748b;font-size:14px;">Email Πελάτη</td>
+            ${params.callerEmail ? `<tr style="border-bottom:1px solid #e2e8f0;">
+              <td style="padding:10px 0;color:#64748b;font-size:14px;">${s.taskEmail}</td>
               <td style="padding:10px 0;color:#1e293b;font-size:14px;font-weight:600;text-align:right;"><a href="mailto:${escapeHtml(params.callerEmail)}" style="color:#4f46e5;text-decoration:none;">${escapeHtml(params.callerEmail)}</a></td>
             </tr>` : ''}
             <tr>
-              <td style="padding:10px 0;color:#64748b;font-size:14px;">AI Βοηθός</td>
+              <td style="padding:10px 0;color:#64748b;font-size:14px;">${s.taskAgent}</td>
               <td style="padding:10px 0;color:#1e293b;font-size:14px;text-align:right;">${escapeHtml(params.agentName)}</td>
             </tr>
           </table>
-
-          ${params.transcript ? `
-          <div style="margin:24px 0;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+          ${params.transcript ? `<div style="margin:24px 0;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
             <div style="background:#f1f5f9;padding:12px 16px;border-bottom:1px solid #e2e8f0;">
-              <p style="margin:0;font-size:14px;font-weight:600;color:#1e293b;">🎙️ Απομαγνητοφώνηση Συνομιλίας</p>
+              <p style="margin:0;font-size:14px;font-weight:600;color:#1e293b;">${s.taskTranscript}</p>
             </div>
             <div style="padding:16px;max-height:400px;overflow-y:auto;background:#fafafa;">
               <pre style="font-family:Inter,system-ui,sans-serif;font-size:13px;color:#334155;line-height:1.8;margin:0;white-space:pre-wrap;word-wrap:break-word;">${escapeHtml(params.transcript)}</pre>
             </div>
           </div>` : ''}
-
           <div style="text-align:center;margin-top:32px;">
-            <a href="${params.confirmUrl}" style="display:inline-block;background:#10b981;color:white;font-size:16px;font-weight:600;padding:14px 32px;border-radius:8px;text-decoration:none;">
-              ✅ Ολοκληρώθηκε
-            </a>
-            <p style="font-size:12px;color:#94a3b8;margin-top:12px;">
-              Πατήστε όταν ολοκληρωθεί η ενέργεια
-            </p>
+            <a href="${params.confirmUrl}" style="display:inline-block;background:#10b981;color:white;font-size:16px;font-weight:600;padding:14px 32px;border-radius:8px;text-decoration:none;">${s.taskConfirmBtn}</a>
+            <p style="font-size:12px;color:#94a3b8;margin-top:12px;">${s.taskConfirmHint}</p>
           </div>
         </div>
-      </body>
-      </html>
-    `,
-    text: `Νέο Task: ${params.taskTitle}\n${params.taskDescription}\nΕνέργεια: ${params.actionRequired}\n${params.transcript ? `\nΣυνομιλία:\n${params.transcript}\n` : ''}Επιβεβαίωση: ${params.confirmUrl}`,
+      </body></html>`,
+    text: s.taskText(params.taskTitle, params.taskDescription, params.actionRequired) + (params.transcript ? `\n\nTranscript:\n${params.transcript}\n` : '') + `\n${params.confirmUrl}`,
   });
 }
 
 // ═══════════════════════════════════════════════════════════════════
 // Task Reminder Email
-// Sent when a task is still pending after X hours
 // ═══════════════════════════════════════════════════════════════════
 
 export async function sendTaskReminderEmail(params: {
@@ -704,41 +803,31 @@ export async function sendTaskReminderEmail(params: {
   reminderNumber: number;
   confirmUrl: string;
   agentName: string;
+  locale?: string;
 }): Promise<void> {
+  const s = t(params.locale);
+  const lang = toEmailLocale(params.locale);
   const hours = Math.round(params.hoursElapsed);
 
   await sendEmail({
     to: params.to,
-    subject: `⏰ Υπενθύμιση: ${params.taskTitle} — Εκκρεμεί ${hours}+ ώρες`,
-    html: `
-      <!DOCTYPE html>
-      <html lang="el">
-      <head><meta charset="UTF-8"></head>
+    subject: s.reminderSubject(params.taskTitle, hours),
+    html: `<!DOCTYPE html><html lang="${lang}"><head><meta charset="UTF-8"></head>
       <body style="font-family:Inter,system-ui,sans-serif;background:#f8fafc;padding:40px 20px;">
         <div style="max-width:560px;margin:0 auto;background:white;border-radius:12px;padding:40px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
           <div style="text-align:center;margin-bottom:24px;">
             <span style="font-size:48px;">⏰</span>
-            <h1 style="font-size:22px;color:#f59e0b;margin-top:12px;">Εκκρεμές Task — ${hours} ώρες</h1>
+            <h1 style="font-size:22px;color:#f59e0b;margin-top:12px;">${s.reminderTitle(hours)}</h1>
           </div>
-
           <p style="font-size:15px;color:#475569;line-height:1.6;text-align:center;">
-            Το task <strong>"${escapeHtml(params.taskTitle)}"</strong> από τον βοηθό <strong>${escapeHtml(params.agentName)}</strong>
-            παραμένει σε αναμονή εδώ και <strong>${hours} ώρες</strong>.
+            ${s.reminderBody(escapeHtml(params.taskTitle), escapeHtml(params.agentName), hours)}
           </p>
-
-          <p style="font-size:13px;color:#94a3b8;text-align:center;margin:4px 0 24px 0;">
-            Υπενθύμιση #${params.reminderNumber}
-          </p>
-
+          <p style="font-size:13px;color:#94a3b8;text-align:center;margin:4px 0 24px 0;">${s.reminderNumber(params.reminderNumber)}</p>
           <div style="text-align:center;">
-            <a href="${params.confirmUrl}" style="display:inline-block;background:#10b981;color:white;font-size:16px;font-weight:600;padding:14px 32px;border-radius:8px;text-decoration:none;">
-              ✅ Ολοκληρώθηκε
-            </a>
+            <a href="${params.confirmUrl}" style="display:inline-block;background:#10b981;color:white;font-size:16px;font-weight:600;padding:14px 32px;border-radius:8px;text-decoration:none;">${s.taskConfirmBtn}</a>
           </div>
         </div>
-      </body>
-      </html>
-    `,
-    text: `Υπενθύμιση: Task "${params.taskTitle}" εκκρεμεί ${hours}+ ώρες. Επιβεβαίωση: ${params.confirmUrl}`,
+      </body></html>`,
+    text: s.reminderText(params.taskTitle, hours) + ` ${params.confirmUrl}`,
   });
 }

@@ -247,6 +247,7 @@ customerRoutes.post('/complete-onboarding', async (c) => {
         businessName: updated.businessName,
         agentName: firstAgent?.name ?? 'AI Assistant',
         phoneNumber: firstAgent?.phoneNumber ?? undefined,
+        locale: updated.locale,
       });
       log.info({ customerId: updated.id, to: updated.email }, 'Welcome email sent');
     } catch (emailErr) {

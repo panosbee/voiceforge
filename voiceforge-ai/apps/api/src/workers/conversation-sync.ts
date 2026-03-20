@@ -88,7 +88,7 @@ async function syncAgentConversations(agent: {
   name: string;
   language: string;
   phoneNumber: string | null;
-  customer: { id: string; timezone: string; email: string; ownerName: string };
+  customer: { id: string; timezone: string; email: string; ownerName: string; locale: string };
 }): Promise<{ recorded: number; skipped: number }> {
   if (!agent.elevenlabsAgentId) return { recorded: 0, skipped: 0 };
 
@@ -182,7 +182,7 @@ async function recordMissedConversation(
     name: string;
     language: string;
     phoneNumber: string | null;
-    customer: { id: string; timezone: string; email: string; ownerName: string };
+    customer: { id: string; timezone: string; email: string; ownerName: string; locale: string };
   },
 ): Promise<{ callId: string } | null> {
   const full = await elevenlabsService.getConversation(conversationId) as Record<string, any>;
@@ -312,6 +312,7 @@ async function recordMissedConversation(
     summary,
     sentiment: sentimentScore,
     appointmentBooked,
+    locale: agent.customer.locale,
   });
 
   // Create appointment if detected — with slot conflict resolution

@@ -38,7 +38,10 @@ export async function runTaskReminders(): Promise<void> {
         isNull(tasks.confirmedAt),
       ),
       with: {
-        agent: { columns: { name: true } },
+        agent: {
+          columns: { name: true },
+          with: { customer: { columns: { locale: true } } },
+        },
       },
     });
 
@@ -78,6 +81,7 @@ export async function runTaskReminders(): Promise<void> {
           reminderNumber: task.reminderCount + 1,
           confirmUrl,
           agentName: task.agent?.name ?? 'AI Agent',
+          locale: (task.agent as any)?.customer?.locale,
         });
 
         await db.update(tasks)

@@ -192,6 +192,7 @@ adminRoutes.post('/license-keys/generate', zValidator('json', generateKeySchema)
       plan: body.plan,
       durationMonths: body.durationMonths,
       expiresAt: new Date(Date.now() + body.durationMonths * 30 * 24 * 60 * 60 * 1000),
+      locale: 'el',
     });
     log.info({ email: registration.email, keyId: newKey?.id }, 'License key email sent');
   } catch (emailErr) {
