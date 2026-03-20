@@ -40,6 +40,7 @@ export function formatDate(date: string | Date, locale: 'el' | 'en' = 'el', opti
     day: 'numeric',
     month: 'short',
     year: 'numeric',
+    timeZone: options?.timeZone ?? 'Europe/Athens',
     ...options,
   });
 }

@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api-client';
 import { formatDuration, formatPhoneNumber, getCallStatusLabels, cn } from '@/lib/utils';
 import { useI18n } from '@/lib/i18n';
+import { useAuthStore } from '@/stores/auth-store';
 import {
   Phone,
   PhoneIncoming,
@@ -84,12 +85,12 @@ type SelectedEvent =
 
 // ── Helpers ──────────────────────────────────────────────────────
 
-const TZ = 'Europe/Athens';
+const DEFAULT_TZ = 'Europe/Athens';
 
 /** Convert ISO string to Temporal.ZonedDateTime for Schedule-X v4 */
-function isoToZdt(iso: string): Temporal.ZonedDateTime {
+function isoToZdt(iso: string, tz: string = DEFAULT_TZ): Temporal.ZonedDateTime {
   const inst = Temporal.Instant.from(new Date(iso).toISOString());
-  return inst.toZonedDateTimeISO(TZ);
+  return inst.toZonedDateTimeISO(tz);
 }
 
 /** Add minutes to a ZonedDateTime */
@@ -100,12 +101,14 @@ function addMinutes(zdt: Temporal.ZonedDateTime, minutes: number): Temporal.Zone
 /** Module-level: today as Temporal.PlainDate — required by Schedule-X v4 */
 const TODAY_PLAIN_DATE = Temporal.Now.plainDateISO();
 
-/** Format time from ISO string */
-function formatTime(iso: string, locale: string) {
+/** Format time from ISO string — always 24h, explicit timezone */
+function formatTime(iso: string, locale: string, tz: string = DEFAULT_TZ) {
   const d = new Date(iso);
   return d.toLocaleTimeString(locale === 'el' ? 'el-GR' : 'en-US', {
     hour: '2-digit',
     minute: '2-digit',
+    hour12: false,
+    timeZone: tz,
   });
 }
 
@@ -116,6 +119,8 @@ function formatTime(iso: string, locale: string) {
 export default function CalendarPage() {
   const { t, locale } = useI18n();
   const statusLabels = getCallStatusLabels(t);
+  const profile = useAuthStore((s) => s.profile);
+  const customerTz = profile?.timezone ?? DEFAULT_TZ;
 
   const [selectedEvent, setSelectedEvent] = useState<SelectedEvent | null>(null);
 
@@ -202,8 +207,8 @@ export default function CalendarPage() {
 
       // Convert to Schedule-X events (Temporal.ZonedDateTime)
       const callEvents = uniqueCalls.map(call => {
-        const startZdt = isoToZdt(call.startedAt);
-        let endZdt = isoToZdt(call.endedAt ?? call.startedAt);
+        const startZdt = isoToZdt(call.startedAt, customerTz);
+        let endZdt = isoToZdt(call.endedAt ?? call.startedAt, customerTz);
         // Ensure min 15 min display for very short calls
         if (Temporal.ZonedDateTime.compare(endZdt, addMinutes(startZdt, 15)) < 0) {
           endZdt = addMinutes(startZdt, 15);
@@ -223,7 +228,7 @@ export default function CalendarPage() {
       });
 
       const aptEvents = uniqueApts.map(apt => {
-        const startZdt = isoToZdt(apt.scheduledAt);
+        const startZdt = isoToZdt(apt.scheduledAt, customerTz);
         const endZdt = addMinutes(startZdt, apt.durationMinutes);
 
         return {
@@ -242,7 +247,7 @@ export default function CalendarPage() {
       toast.error(t.calendar.loadError);
       return [];
     }
-  }, [t.calendar.loadError]);
+  }, [t.calendar.loadError, customerTz]);
 
   // ── Schedule-X calendar app ──────────────────────────────────
 
@@ -512,7 +517,7 @@ export default function CalendarPage() {
                       </p>
                       {icalLastSynced && (
                         <p className="text-xs text-text-tertiary">
-                          {t.calendar.icalLastSync}: {new Date(icalLastSynced).toLocaleString(locale === 'el' ? 'el-GR' : 'en-US')}
+                          {t.calendar.icalLastSync}: {new Date(icalLastSynced).toLocaleString(locale === 'el' ? 'el-GR' : 'en-US', { timeZone: customerTz, hour12: false })}
                         </p>
                       )}
                     </div>
@@ -551,8 +556,8 @@ export default function CalendarPage() {
               <h3 className="text-sm font-bold text-text-primary tracking-tight">
                 {selectedEvent
                   ? selectedEvent.type === 'call'
-                    ? `${t.calendar.incoming} · ${formatTime(selectedEvent.data.startedAt, locale)}`
-                    : `${t.calendar.appointmentsTag} · ${formatTime(selectedEvent.data.scheduledAt, locale)}`
+                    ? `${t.calendar.incoming} · ${formatTime(selectedEvent.data.startedAt, locale, customerTz)}`
+                    : `${t.calendar.appointmentsTag} · ${formatTime(selectedEvent.data.scheduledAt, locale, customerTz)}`
                   : t.calendar.title}
               </h3>
               {selectedEvent && (
@@ -583,6 +588,7 @@ export default function CalendarPage() {
                   apt={selectedEvent.data}
                   locale={locale}
                   t={t}
+                  tz={customerTz}
                   onDelete={handleDeleteAppointment}
                 />
               ) : (
@@ -590,6 +596,7 @@ export default function CalendarPage() {
                   call={selectedEvent.data}
                   locale={locale}
                   t={t}
+                  tz={customerTz}
                   statusLabels={statusLabels}
                   playingCallId={playingCallId}
                   onPlay={handlePlay}
@@ -612,11 +619,13 @@ function AppointmentDetail({
   apt,
   locale,
   t,
+  tz,
   onDelete,
 }: {
   apt: CalendarAppointment;
   locale: string;
   t: any;
+  tz: string;
   onDelete: (id: string) => void;
 }) {
   const aptStatusLabel = {
@@ -648,7 +657,7 @@ function AppointmentDetail({
         <div>
           <span className="text-text-tertiary">{t.calendar.appointmentTime}</span>
           <p className="text-text-primary font-medium mt-0.5">
-            {formatTime(apt.scheduledAt, locale)} · {apt.durationMinutes}{locale === 'el' ? 'λ' : 'min'}
+            {formatTime(apt.scheduledAt, locale, tz)} · {apt.durationMinutes}{locale === 'el' ? 'λ' : 'min'}
           </p>
         </div>
         <div>
@@ -702,6 +711,7 @@ function CallDetail({
   call,
   locale,
   t,
+  tz,
   statusLabels,
   playingCallId,
   onPlay,
@@ -710,6 +720,7 @@ function CallDetail({
   call: CalendarCall;
   locale: string;
   t: any;
+  tz: string;
   statusLabels: Record<string, { label: string; color: string }>;
   playingCallId: string | null;
   onPlay: (callId: string, url: string) => void;
@@ -754,7 +765,7 @@ function CallDetail({
         <div>
           <span className="text-text-tertiary">{call.direction === 'inbound' ? t.calendar.incoming : t.calendar.outgoing}</span>
           <p className="text-text-primary font-mono text-[11px] mt-0.5">
-            {formatTime(call.startedAt, locale)}
+            {formatTime(call.startedAt, locale, tz)}
           </p>
         </div>
       </div>
