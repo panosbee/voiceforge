@@ -252,9 +252,9 @@ export default function CalendarPage() {
     defaultView: 'month-grid',
     views: [createViewMonthGrid(), createViewWeek(), createViewDay()],
     selectedDate: TODAY_PLAIN_DATE,
-    dayBoundaries: { start: '07:00', end: '21:00' },
-    weekOptions: { gridHeight: 800, nDays: 5, eventWidth: 95 },
-    monthGridOptions: { nEventsPerDay: 4 },
+    dayBoundaries: { start: '07:00', end: '22:00' },
+    weekOptions: { gridHeight: 1000, nDays: 7, eventWidth: 85 },
+    monthGridOptions: { nEventsPerDay: 10 },
     calendars: {
       'calls-completed': {
         colorName: 'calls-completed',
@@ -438,18 +438,25 @@ export default function CalendarPage() {
           </Card>
 
           {/* Legend */}
-          <div className="flex flex-wrap items-center gap-4 mt-3 px-1">
-            <div className="flex items-center gap-1.5 text-xs text-text-secondary">
-              <span className="w-3 h-3 rounded-sm bg-success-500" />
+          <div className="flex flex-wrap items-center gap-5 mt-4 px-2 py-2.5 rounded-xl bg-surface/80 border border-border/50">
+            <span className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">
+              {locale === 'el' ? 'Υπόμνημα' : 'Legend'}
+            </span>
+            <div className="flex items-center gap-2 text-xs text-text-secondary font-medium">
+              <span className="w-3 h-3 rounded-full bg-success-500 ring-2 ring-success-500/20" />
               {t.calendar.incoming} ({locale === 'el' ? 'ολοκληρωμένη' : 'completed'})
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-text-secondary">
-              <span className="w-3 h-3 rounded-sm bg-danger-500" />
+            <div className="flex items-center gap-2 text-xs text-text-secondary font-medium">
+              <span className="w-3 h-3 rounded-full bg-danger-500 ring-2 ring-danger-500/20" />
               {locale === 'el' ? 'Αναπάντητη' : 'Missed'}
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-text-secondary">
-              <span className="w-3 h-3 rounded-sm bg-amber-500" />
+            <div className="flex items-center gap-2 text-xs text-text-secondary font-medium">
+              <span className="w-3 h-3 rounded-full bg-amber-500 ring-2 ring-amber-500/20" />
               {t.calendar.appointmentsTag}
+            </div>
+            <div className="flex items-center gap-2 text-xs text-text-secondary font-medium">
+              <span className="w-3 h-3 rounded-full bg-gray-400 ring-2 ring-gray-400/20" />
+              {locale === 'el' ? 'Άλλο / Ακυρωμένο' : 'Other / Cancelled'}
             </div>
           </div>
 
@@ -539,9 +546,9 @@ export default function CalendarPage() {
 
         {/* ── Event Detail Panel ────────────────────────────────── */}
         <div className="xl:col-span-1">
-          <Card padding="none" className="sticky top-6">
-            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-              <h3 className="text-base font-semibold text-text-primary">
+          <Card padding="none" className="sticky top-6 overflow-hidden border-border/70 shadow-lg">
+            <div className="px-5 py-4 border-b border-border bg-gradient-to-r from-surface-secondary to-surface flex items-center justify-between">
+              <h3 className="text-sm font-bold text-text-primary tracking-tight">
                 {selectedEvent
                   ? selectedEvent.type === 'call'
                     ? `${t.calendar.incoming} · ${formatTime(selectedEvent.data.startedAt, locale)}`
@@ -560,10 +567,15 @@ export default function CalendarPage() {
 
             <div className="max-h-[calc(100vh-280px)] overflow-y-auto">
               {!selectedEvent ? (
-                <div className="py-16 text-center">
-                  <CalendarIcon className="w-10 h-10 text-text-tertiary mx-auto mb-3" />
-                  <p className="text-sm text-text-tertiary">
-                    {locale === 'el' ? 'Κλικ σε ένα γεγονός για λεπτομέρειες' : 'Click an event for details'}
+                <div className="py-20 text-center px-6">
+                  <div className="w-14 h-14 rounded-2xl bg-brand-50 flex items-center justify-center mx-auto mb-4">
+                    <CalendarIcon className="w-7 h-7 text-brand-400" />
+                  </div>
+                  <p className="text-sm font-medium text-text-secondary mb-1">
+                    {locale === 'el' ? 'Επιλέξτε γεγονός' : 'Select an event'}
+                  </p>
+                  <p className="text-xs text-text-tertiary leading-relaxed">
+                    {locale === 'el' ? 'Κλικ σε ένα γεγονός στο ημερολόγιο για να δείτε λεπτομέρειες' : 'Click on a calendar event to view its details'}
                   </p>
                 </div>
               ) : selectedEvent.type === 'appointment' ? (
