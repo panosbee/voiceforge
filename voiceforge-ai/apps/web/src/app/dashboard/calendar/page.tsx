@@ -253,7 +253,7 @@ export default function CalendarPage() {
     views: [createViewMonthGrid(), createViewWeek(), createViewDay()],
     selectedDate: TODAY_PLAIN_DATE,
     dayBoundaries: { start: '07:00', end: '22:00' },
-    weekOptions: { gridHeight: 1000, nDays: 7, eventWidth: 95, eventOverlap: false },
+    weekOptions: { gridHeight: 1000, nDays: 7, eventWidth: 100, eventOverlap: false },
     monthGridOptions: { nEventsPerDay: 10 },
     calendars: {
       'calls-completed': {
