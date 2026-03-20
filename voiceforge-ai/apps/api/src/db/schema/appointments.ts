@@ -3,7 +3,7 @@
 // Booked appointments created during AI agent calls
 // ═══════════════════════════════════════════════════════════════════
 
-import { pgTable, uuid, text, timestamp, integer, boolean, pgEnum, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, timestamp, integer, boolean, pgEnum, index, unique } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { customers } from './customers';
 import { agents } from './agents';
@@ -54,6 +54,7 @@ export const appointments = pgTable(
     index('idx_appointments_customer').on(table.customerId),
     index('idx_appointments_scheduled').on(table.scheduledAt),
     index('idx_appointments_caller_phone').on(table.callerPhone),
+    unique('uq_appointments_customer_time').on(table.customerId, table.scheduledAt),
   ],
 );
 

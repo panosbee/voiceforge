@@ -176,38 +176,40 @@ toolRoutes.post('/calendar/book', async (c) => {
       });
     }
 
-    // Check for double-booking
-    const existingAtTime = await db.query.appointments.findFirst({
-      where: and(
-        eq(appointments.customerId, customer_id),
-        eq(appointments.scheduledAt, scheduledAt),
-        eq(appointments.status, 'confirmed'),
-      ),
+    const [newAppointment] = await db.transaction(async (tx) => {
+      const existingAtTime = await tx.query.appointments.findFirst({
+        where: and(
+          eq(appointments.customerId, customer_id),
+          eq(appointments.scheduledAt, scheduledAt),
+        ),
+      });
+
+      if (existingAtTime) return [null];
+
+      return tx
+        .insert(appointments)
+        .values({
+          customerId: customer_id,
+          agentId: agent.id,
+          callerName: caller_name,
+          callerPhone: caller_phone,
+          serviceType: service_type ?? null,
+          scheduledAt,
+          durationMinutes: 30,
+          status: 'confirmed',
+          notes: notes ?? null,
+        })
+        .onConflictDoNothing({ target: [appointments.customerId, appointments.scheduledAt] })
+        .returning();
     });
 
-    if (existingAtTime) {
+    if (!newAppointment) {
       return c.json<AppointmentBookResponse>({
         success: false,
         message: `Η ώρα ${time} είναι ήδη κρατημένη. Παρακαλώ επιλέξτε άλλη ώρα.`,
         confirmation: '',
       });
     }
-
-    // Create the appointment
-    const [newAppointment] = await db
-      .insert(appointments)
-      .values({
-        customerId: customer_id,
-        agentId: agent.id,
-        callerName: caller_name,
-        callerPhone: caller_phone,
-        serviceType: service_type ?? null,
-        scheduledAt,
-        durationMinutes: 30,
-        status: 'confirmed',
-        notes: notes ?? null,
-      })
-      .returning();
 
     // TODO: Sync to Google Calendar if connected
     // TODO: Send push notification to customer

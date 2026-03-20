@@ -461,8 +461,7 @@ elevenlabsWebhookRoutes.post('/post-conversation', async (c) => {
             'Existing appointment linked to call record (no duplicate created)',
           );
         } else {
-          // No existing appointment — create one from post-call extracted data
-          await db.insert(appointments).values({
+          const [created] = await db.insert(appointments).values({
             customerId: agent.customerId,
             agentId: agent.id,
             callId: callRecord.id,
@@ -471,8 +470,14 @@ elevenlabsWebhookRoutes.post('/post-conversation', async (c) => {
             scheduledAt,
             notes: appointmentReason ?? summary ?? null,
             status: 'pending',
-          });
-          log.info({ callId: callRecord.id, scheduledAt: scheduledAt.toISOString() }, 'Appointment record created from post-call data');
+          })
+            .onConflictDoNothing({ target: [appointments.customerId, appointments.scheduledAt] })
+            .returning();
+          if (created) {
+            log.info({ callId: callRecord.id, scheduledAt: scheduledAt.toISOString() }, 'Appointment record created from post-call data');
+          } else {
+            log.info({ callId: callRecord.id, scheduledAt: scheduledAt.toISOString() }, 'Post-call appointment skipped — slot already booked (unique constraint)');
+          }
         }
       } catch (aptErr) {
         log.error({ error: aptErr }, 'Failed to create/link appointment record');
@@ -776,22 +781,7 @@ elevenlabsWebhookRoutes.post('/server-tool', async (c) => {
             });
           }
 
-          // ── Slot conflict check ─────────────────────────────────
-          const { startDate: dayStart, endDate: dayEnd } = getDayRangeInTimezone(date, customerTz);
-          const existingApts = await db.query.appointments.findMany({
-            where: and(
-              eq(appointments.customerId, agentRecord.customerId),
-              gte(appointments.scheduledAt, dayStart),
-              lte(appointments.scheduledAt, dayEnd),
-            ),
-          });
-
-          // Check if requested slot is taken (same hour:minute)
-          const busyTimes = existingApts
-            .filter(a => a.status !== 'cancelled')
-            .map(a => formatTimeInTimezone(new Date(a.scheduledAt), customerTz));
-
-          // Also check iCal external calendar busy slots
+          // ── Slot conflict check + atomic booking ────────────────
           const { getIcalBusySlots } = await import('../services/ical.js');
           const icalBusyTimes = await getIcalBusySlots(
             agentRecord.customerId,
@@ -799,50 +789,84 @@ elevenlabsWebhookRoutes.post('/server-tool', async (c) => {
             customerTz,
             bhConfig.slotDurationMinutes,
           );
-          const allBusyTimes = [...new Set([...busyTimes, ...icalBusyTimes])];
 
-          if (allBusyTimes.includes(time)) {
-            // Find nearest available slot
-            const freeSlots = validSlots.filter(t => !allBusyTimes.includes(t));
+          const { startDate: dayStart, endDate: dayEnd } = getDayRangeInTimezone(date, customerTz);
 
-            // Find closest free slot to the requested time
-            let nearestSlot: string | null = null;
-            if (freeSlots.length > 0) {
-              const toMinutes = (t: string) => {
-                const [h, m] = t.split(':');
-                return parseInt(h ?? '0', 10) * 60 + parseInt(m ?? '0', 10);
-              };
-              const reqMinutes = toMinutes(time);
-              nearestSlot = freeSlots.reduce((closest, slot) =>
-                Math.abs(toMinutes(slot) - reqMinutes) < Math.abs(toMinutes(closest) - reqMinutes) ? slot : closest
-              );
+          const toMinutes = (t: string) => {
+            const [h, m] = t.split(':');
+            return parseInt(h ?? '0', 10) * 60 + parseInt(m ?? '0', 10);
+          };
+
+          const bookingResult = await db.transaction(async (tx) => {
+            const existingApts = await tx.query.appointments.findMany({
+              where: and(
+                eq(appointments.customerId, agentRecord.customerId),
+                gte(appointments.scheduledAt, dayStart),
+                lte(appointments.scheduledAt, dayEnd),
+              ),
+            });
+
+            const busyTimes = existingApts
+              .filter(a => a.status !== 'cancelled')
+              .map(a => formatTimeInTimezone(new Date(a.scheduledAt), customerTz));
+
+            const allBusyTimes = [...new Set([...busyTimes, ...icalBusyTimes])];
+
+            if (allBusyTimes.includes(time)) {
+              const freeSlots = validSlots.filter(t => !allBusyTimes.includes(t));
+              let nearestSlot: string | null = null;
+              if (freeSlots.length > 0) {
+                const reqMinutes = toMinutes(time);
+                nearestSlot = freeSlots.reduce((closest, slot) =>
+                  Math.abs(toMinutes(slot) - reqMinutes) < Math.abs(toMinutes(closest) - reqMinutes) ? slot : closest
+                );
+              }
+              return { conflict: true as const, nearestSlot, freeSlots };
             }
 
+            const [apt] = await tx.insert(appointments).values({
+              customerId: agentRecord.customerId,
+              agentId: agentRecord.id,
+              callerName: callerName ?? 'Άγνωστος',
+              callerPhone: callerPhone ?? 'unknown',
+              serviceType: serviceType ?? null,
+              scheduledAt,
+              durationMinutes: bhConfig.slotDurationMinutes,
+              notes: notes ?? `Κλείστηκε μέσω AI. Καλών: ${callerName ?? 'N/A'}`,
+              status: 'pending',
+            })
+              .onConflictDoNothing({ target: [appointments.customerId, appointments.scheduledAt] })
+              .returning();
+
+            if (!apt) {
+              const freeSlots = validSlots.filter(t => !allBusyTimes.includes(t));
+              let nearestSlot: string | null = null;
+              if (freeSlots.length > 0) {
+                const reqMinutes = toMinutes(time);
+                nearestSlot = freeSlots.reduce((closest, slot) =>
+                  Math.abs(toMinutes(slot) - reqMinutes) < Math.abs(toMinutes(closest) - reqMinutes) ? slot : closest
+                );
+              }
+              return { conflict: true as const, nearestSlot, freeSlots };
+            }
+
+            return { conflict: false as const, apt };
+          });
+
+          if (bookingResult.conflict) {
             return c.json({
               success: false,
               slot_taken: true,
               requested_time: time,
-              message: nearestSlot
-                ? `Η ώρα ${time} είναι ήδη κρατημένη. Η πιο κοντινή διαθέσιμη ώρα είναι ${nearestSlot}. Θέλει ο πελάτης να κλείσει στις ${nearestSlot};`
+              message: bookingResult.nearestSlot
+                ? `Η ώρα ${time} είναι ήδη κρατημένη. Η πιο κοντινή διαθέσιμη ώρα είναι ${bookingResult.nearestSlot}. Θέλει ο πελάτης να κλείσει στις ${bookingResult.nearestSlot};`
                 : `Η ώρα ${time} είναι ήδη κρατημένη και δεν υπάρχουν άλλα διαθέσιμα slots για ${date}. Ρώτα τον πελάτη αν θέλει άλλη ημέρα.`,
-              nearest_available: nearestSlot,
-              available_slots: freeSlots,
+              nearest_available: bookingResult.nearestSlot,
+              available_slots: bookingResult.freeSlots,
             });
           }
 
-          // ── Slot is free — book it ──────────────────────────────
-          const [apt] = await db.insert(appointments).values({
-            customerId: agentRecord.customerId,
-            agentId: agentRecord.id,
-            callerName: callerName ?? 'Άγνωστος',
-            callerPhone: callerPhone ?? 'unknown',
-            serviceType: serviceType ?? null,
-            scheduledAt,
-            durationMinutes: bhConfig.slotDurationMinutes,
-            notes: notes ?? `Κλείστηκε μέσω AI. Καλών: ${callerName ?? 'N/A'}`,
-            status: 'pending',
-          }).returning();
-
+          const apt = bookingResult.apt;
           log.info({ appointmentId: apt?.id, date, time }, 'Appointment booked successfully');
 
           // ── Send .ics email invite (fire-and-forget) ────────────
