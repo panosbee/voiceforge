@@ -37,8 +37,8 @@ adminRoutes.use('*', async (c, next) => {
     return next();
   }
 
-  const adminToken = c.req.header('X-Admin-Token') || c.req.query('token');
-  const expectedSecret = env.ADMIN_SECRET || 'voiceforge-admin-2026';
+  const adminToken = c.req.header('X-Admin-Token');
+  const expectedSecret = env.ADMIN_SECRET;
 
   if (!adminToken || adminToken !== expectedSecret) {
     return c.json<ApiResponse>(
@@ -59,7 +59,7 @@ const adminLoginSchema = z.object({
 
 adminRoutes.post('/login', zValidator('json', adminLoginSchema), async (c) => {
   const { secret } = c.req.valid('json');
-  const expectedSecret = env.ADMIN_SECRET || 'voiceforge-admin-2026';
+  const expectedSecret = env.ADMIN_SECRET;
 
   if (secret !== expectedSecret) {
     return c.json<ApiResponse>(

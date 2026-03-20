@@ -88,7 +88,7 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
 
   // Admin Panel
-  ADMIN_SECRET: z.string().min(8).default('voiceforge-admin-2026'),
+  ADMIN_SECRET: z.string().min(8),
   ADMIN_EMAIL: z.string().email().default('admin@voiceforge.ai'),
 
   // Data retention (GDPR — days before auto-cleanup)
