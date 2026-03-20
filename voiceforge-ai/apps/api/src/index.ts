@@ -143,10 +143,10 @@ app.route('/api/billing', billingRoutes);
 app.route('/api/gdpr', gdprRoutes);
 app.route('/api/kb-wizard', kbWizardRoutes);
 app.route('/api/support-chat', supportChatRoutes);
-app.route('/api/tasks', taskRoutes);
-
-// Public task confirmation (no auth — accessed from email links)
 app.route('/api/tasks', taskPublicRoutes);
+
+// Auth-protected task routes (after public, so /confirm/:id matches first)
+app.route('/api/tasks', taskRoutes);
 
 // ── Global Error Handler ─────────────────────────────────────────
 
