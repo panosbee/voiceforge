@@ -129,10 +129,11 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   Schedule-X Calendar — VoiceForge Professional Theme
-   Complete visual overhaul: brand colors, polished month/week/day
-   views, scrollable day cells, overlap-safe time grid, and
-   refined typography.
+   Schedule-X Calendar — VoiceForge Theme
+   Only override CSS custom properties (colors, spacing, rounding)
+   and minimal layout tweaks. All font-weights left at library
+   defaults: 500 for labels, 600 for event titles, 700 only for
+   today's day-name in week view.
    ═══════════════════════════════════════════════════════════════════ */
 
 /* ── Brand Color Variables (replaces default purple) ────────────── */
@@ -164,9 +165,8 @@ body {
   --sx-internal-color-light-gray: #f8fafc;
   --sx-internal-color-gray-ripple-background: #e2e8f0;
   --sx-rounding-extra-small: 6px;
-  --sx-rounding-small: 12px;
+  --sx-rounding-small: 10px;
   --sx-border: 1px solid #e2e8f0;
-  --sx-font-extra-small: 0.8125rem;
 }
 
 .dark .sx-calendar-wrapper,
@@ -199,44 +199,27 @@ body {
 
 .sx-calendar-wrapper .sx__calendar {
   border: none;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.03);
-  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
   overflow: hidden;
 }
 
 /* ── Calendar Header ────────────────────────────────────────────── */
 
 .sx-calendar-wrapper .sx__calendar-header {
-  padding: 16px 20px;
-  background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+  padding: 14px 18px;
   border-bottom: 1px solid #e2e8f0;
-  gap: 12px;
 }
 
 .dark .sx-calendar-wrapper .sx__calendar-header {
-  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
   border-bottom-color: #334155;
-}
-
-.sx-calendar-wrapper .sx__range-heading {
-  font-weight: 700;
-  color: #0f172a;
-  letter-spacing: -0.02em;
-  font-size: clamp(16px, 1.25rem, 22px);
-}
-
-.dark .sx-calendar-wrapper .sx__range-heading {
-  color: #f1f5f9;
 }
 
 .sx-calendar-wrapper .sx__today-button {
   border-radius: 8px;
-  font-weight: 600;
-  padding: 8px 16px;
-  transition: all 0.2s ease;
+  padding: 7px 14px;
+  transition: all 0.15s ease;
   border: 1px solid #e2e8f0;
-  color: #334155;
 }
 
 .sx-calendar-wrapper .sx__today-button:hover,
@@ -248,22 +231,13 @@ body {
 
 .dark .sx-calendar-wrapper .sx__today-button {
   border-color: #475569;
-  color: #cbd5e1;
-}
-
-.dark .sx-calendar-wrapper .sx__today-button:hover,
-.dark .sx-calendar-wrapper .sx__today-button:focus {
-  background: #1e3a5f !important;
-  border-color: #3b82f6;
-  color: #93c5fd;
 }
 
 /* View selection dropdown */
 .sx-calendar-wrapper .sx__view-selection-selected-item {
   border-radius: 8px;
-  font-weight: 500;
-  padding: 8px 14px;
-  transition: all 0.2s ease;
+  padding: 7px 14px;
+  transition: all 0.15s ease;
   border: 1px solid #e2e8f0;
 }
 
@@ -277,21 +251,20 @@ body {
 }
 
 .sx-calendar-wrapper .sx__view-selection-items {
-  border-radius: 10px;
+  border-radius: 8px;
   border: 1px solid #e2e8f0;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
   overflow: hidden;
 }
 
 .dark .sx-calendar-wrapper .sx__view-selection-items {
   border-color: #475569;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
 }
 
 .sx-calendar-wrapper .sx__view-selection-item {
-  padding: 10px 16px;
-  font-weight: 500;
-  transition: all 0.15s ease;
+  padding: 9px 16px;
+  transition: background 0.15s ease;
 }
 
 .sx-calendar-wrapper .sx__view-selection-item:hover {
@@ -307,12 +280,7 @@ body {
 /* Navigation arrows */
 .sx-calendar-wrapper .sx__chevron-wrapper {
   border-radius: 8px;
-  transition: all 0.2s ease;
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  transition: background 0.15s ease;
 }
 
 .sx-calendar-wrapper .sx__chevron-wrapper:hover {
@@ -323,81 +291,29 @@ body {
   background: #1e3a5f;
 }
 
-/* ── Month Grid — Taller Rows + Scrollable Events ───────────────── */
-
-.sx-calendar-wrapper .sx__month-grid-wrapper {
-  flex: 1;
-}
+/* ── Month Grid ─────────────────────────────────────────────────── */
 
 .sx-calendar-wrapper .sx__month-grid-week {
-  min-height: 130px;
-  border-top-color: #f1f5f9;
-}
-
-.dark .sx-calendar-wrapper .sx__month-grid-week {
-  border-top-color: #1e293b;
+  min-height: 140px;
 }
 
 .sx-calendar-wrapper .sx__month-grid-day {
   padding: 4px 0;
-  transition: background-color 0.15s ease;
 }
 
-.sx-calendar-wrapper .sx__month-grid-day:hover {
-  background: rgba(59, 130, 246, 0.02);
-}
-
-.dark .sx-calendar-wrapper .sx__month-grid-day:hover {
-  background: rgba(59, 130, 246, 0.05);
-}
-
-.sx-calendar-wrapper .sx__month-grid-day:not(:last-child) {
-  border-inline-end-color: #f1f5f9;
-}
-
-.dark .sx-calendar-wrapper .sx__month-grid-day:not(:last-child) {
-  border-inline-end-color: #1e293b;
-}
-
-/* Day header — compact and clean */
-.sx-calendar-wrapper .sx__month-grid-day__header {
-  margin-bottom: 2px;
-}
-
-.sx-calendar-wrapper .sx__month-grid-day__header-day-name {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: #94a3b8;
-  text-transform: uppercase;
-}
-
-.sx-calendar-wrapper .sx__month-grid-day__header-date {
-  font-weight: 600;
-  font-size: 13px;
-  width: 28px;
-  height: 28px;
-  transition: all 0.2s ease;
-  color: #334155;
-}
-
-.dark .sx-calendar-wrapper .sx__month-grid-day__header-date {
-  color: #cbd5e1;
-}
-
+/* Today highlight in month grid */
 .sx-calendar-wrapper .sx__month-grid-day__header-date.sx__is-today {
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  background: #3b82f6;
   color: white;
-  font-weight: 700;
-  box-shadow: 0 2px 10px rgba(59, 130, 246, 0.4);
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.35);
 }
 
-/* Events container — scrollable when lots of events */
+/* Events container — scrollable when many events */
 .sx-calendar-wrapper .sx__month-grid-day__events {
-  gap: 3px;
-  padding: 0 4px;
+  gap: 2px;
+  padding: 0 3px;
   overflow-y: auto;
-  max-height: 110px;
+  max-height: 120px;
   scrollbar-width: thin;
   scrollbar-color: #cbd5e1 transparent;
 }
@@ -423,39 +339,25 @@ body {
   background: #475569;
 }
 
-/* Month event pills — refined capsule style */
+/* Month event pills */
 .sx-calendar-wrapper .sx__month-grid-event {
-  border-radius: 5px;
-  font-size: 11.5px;
-  font-weight: 500;
-  padding: 2px 6px;
-  transition: all 0.15s ease;
+  border-radius: 4px;
+  padding: 2px 5px;
   cursor: pointer;
-  letter-spacing: -0.01em;
-  line-height: 1.4;
+  transition: filter 0.15s ease;
 }
 
 .sx-calendar-wrapper .sx__month-grid-event:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12);
-  z-index: 5;
-  filter: brightness(1.05);
+  filter: brightness(1.08);
 }
 
-.sx-calendar-wrapper .sx__month-grid-cell {
-  height: clamp(20px, 1.25rem, 22px);
-}
-
-/* "More events" link — styled as a subtle button */
+/* "More events" link */
 .sx-calendar-wrapper .sx__month-grid-day__events-more {
-  font-weight: 700;
   color: #3b82f6;
-  border-radius: 5px;
-  font-size: 11px;
-  padding: 3px 6px;
-  margin: 2px 4px;
-  transition: all 0.2s ease;
-  text-align: center;
+  border-radius: 4px;
+  padding: 2px 5px;
+  margin: 2px 3px;
+  transition: background 0.15s ease;
 }
 
 .sx-calendar-wrapper .sx__month-grid-day__events-more:hover {
@@ -474,23 +376,10 @@ body {
 
 /* ── Week / Day — Time Grid ─────────────────────────────────────── */
 
-/* Day header row in week view */
-.sx-calendar-wrapper .sx__week-grid__day-name {
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  font-size: 10px;
-  color: #94a3b8;
-}
-
-.sx-calendar-wrapper .sx__week-grid__date-number {
-  font-weight: 600;
-  transition: all 0.2s ease;
-  font-size: 1.15rem;
-}
-
+/* Today highlight in week header */
 .sx-calendar-wrapper .sx__week-grid__date--is-today .sx__week-grid__date-number {
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
-  box-shadow: 0 2px 10px rgba(59, 130, 246, 0.4);
+  background: #3b82f6;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.35);
   color: white;
 }
 
@@ -498,41 +387,15 @@ body {
   color: #2563eb;
 }
 
-/* Hour grid lines — lighter for cleaner look */
-.sx-calendar-wrapper .sx__week-grid__hour {
-  border-top-color: #f1f5f9;
-}
-
-.dark .sx-calendar-wrapper .sx__week-grid__hour {
-  border-top-color: #1e293b;
-}
-
-.sx-calendar-wrapper .sx__week-grid__hour-text {
-  color: #94a3b8;
-  font-size: 11px;
-  font-weight: 500;
-}
-
-/* Day column separators */
-.sx-calendar-wrapper .sx__time-grid-day {
-  border-left-color: #f1f5f9;
-}
-
-.dark .sx-calendar-wrapper .sx__time-grid-day {
-  border-left-color: #1e293b;
-}
-
-/* Time grid events — clean cards with left accent, side-by-side layout */
+/* Time grid events — left accent border, side-by-side layout */
 .sx-calendar-wrapper .sx__time-grid-event {
   border-radius: 6px;
-  font-size: 12px;
   padding: 4px 6px 4px 8px;
   border-left: 3px solid;
   box-sizing: border-box;
-  transition: box-shadow 0.2s ease;
+  transition: box-shadow 0.15s ease;
   cursor: pointer;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-  overflow: hidden;
 }
 
 .sx-calendar-wrapper .sx__time-grid-event:hover {
@@ -540,23 +403,7 @@ body {
   z-index: 10 !important;
 }
 
-.sx-calendar-wrapper .sx__time-grid-event-title {
-  font-weight: 600;
-  font-size: 11.5px;
-  line-height: 1.3;
-}
-
-.sx-calendar-wrapper .sx__time-grid-event-time {
-  font-size: 10.5px;
-  opacity: 0.75;
-  font-weight: 500;
-}
-
 /* ── Current Time Indicator ─────────────────────────────────────── */
-
-.sx-calendar-wrapper .sx__current-time-indicator {
-  z-index: 50;
-}
 
 .sx-calendar-wrapper .sx__current-time-line {
   border-color: #ef4444;
@@ -574,19 +421,17 @@ body {
   background: #ef4444;
 }
 
-/* ── Event Modal (popup on click) ───────────────────────────────── */
+/* ── Event Modal ────────────────────────────────────────────────── */
 
 .sx-calendar-wrapper .sx__event-modal {
-  border-radius: 14px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15), 0 4px 12px rgba(0, 0, 0, 0.08);
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.06);
   border: 1px solid #e2e8f0;
-  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
-  animation: fadeIn 0.2s ease-out;
 }
 
 .dark .sx-calendar-wrapper .sx__event-modal {
   border-color: #475569;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
 }
 
 /* ── Week Number Badge ──────────────────────────────────────────── */
@@ -596,8 +441,6 @@ body {
 .sx-calendar-wrapper .sx__calendar-header__week-number {
   background: #f1f5f9;
   color: #64748b;
-  font-weight: 600;
-  font-size: 11px;
 }
 
 .dark .sx-calendar-wrapper .sx__month-grid-week__week-number,
@@ -610,58 +453,32 @@ body {
 /* ── Date Grid (all-day events bar) ─────────────────────────────── */
 
 .sx-calendar-wrapper .sx__date-grid-event {
-  border-radius: 6px;
-  font-weight: 500;
-  font-size: 12px;
+  border-radius: 4px;
   padding: 2px 8px;
-}
-
-/* ── Forward / Backward Navigation ──────────────────────────────── */
-
-.sx-calendar-wrapper .sx__forward-backward-navigation {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-/* ── View Container Smooth Scroll ───────────────────────────────── */
-
-.sx-calendar-wrapper .sx__view-container {
-  scroll-behavior: smooth;
 }
 
 /* ── Date Picker Popup ──────────────────────────────────────────── */
 
 .sx-calendar-wrapper .sx__date-picker-popup {
-  border-radius: 14px;
+  border-radius: 10px;
   border: 1px solid #e2e8f0;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.12);
-  animation: fadeIn 0.2s ease-out;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.1);
 }
 
 .dark .sx-calendar-wrapper .sx__date-picker-popup {
   border-color: #475569;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
-}
-
-.sx-calendar-wrapper .sx__date-picker__day:hover {
-  background: #eff6ff;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
 }
 
 .sx-calendar-wrapper .sx__date-picker__day.sx__date-picker__day--today {
   background: #3b82f6;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
 }
 
-/* ── Print Styles ───────────────────────────────────────────────── */
+/* ── Print ───────────────────────────────────────────────────────── */
 
 @media print {
   .sx-calendar-wrapper .sx__calendar {
     box-shadow: none;
     border: 1px solid #e2e8f0;
-  }
-
-  .sx-calendar-wrapper .sx__calendar-header {
-    background: white;
   }
 }
