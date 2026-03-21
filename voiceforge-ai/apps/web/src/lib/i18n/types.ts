@@ -190,6 +190,10 @@ export interface Translations {
     deleteConfirm: string;
     testAgent: string;
     assignNumber: string;
+    unassignNumber: string;
+    unassignConfirm: string;
+    unassignSuccess: string;
+    unassignError: string;
     name: string;
     namePlaceholder: string;
     industry: string;

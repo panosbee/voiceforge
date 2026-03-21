@@ -10,7 +10,7 @@ import { Button, Card, Badge, Spinner, EmptyState, PageHeader } from '@/componen
 import { api } from '@/lib/api-client';
 import { formatPhoneNumber, getIndustryLabels } from '@/lib/utils';
 import { useI18n } from '@/lib/i18n';
-import { Bot, Plus, Phone, Trash2, Pencil, Cpu, PhoneCall, PhoneForwarded } from 'lucide-react';
+import { Bot, Plus, Phone, Trash2, Pencil, Cpu, PhoneCall, PhoneForwarded, PhoneOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { GREEK_VOICES, AI_PROVIDER } from '@voiceforge/shared';
 import type { AgentSummary, ApiResponse } from '@voiceforge/shared';
@@ -57,6 +57,19 @@ export default function AgentsPage() {
       setAgents((prev) => prev.filter((a) => a.id !== agentId));
     } catch {
       toast.error(t.agents.deleteError);
+    }
+  };
+
+  const handleUnassignNumber = async (agentId: string, agentName: string) => {
+    if (!confirm(t.agents.unassignConfirm.replace('{name}', agentName))) return;
+    try {
+      const result = await api.post<ApiResponse>('/api/numbers/unassign', { agentId });
+      if (result.success) {
+        toast.success(t.agents.unassignSuccess);
+        loadAgents();
+      }
+    } catch {
+      toast.error(t.agents.unassignError);
     }
   };
 
@@ -169,6 +182,13 @@ export default function AgentsPage() {
                       <div className="flex items-center gap-2 text-sm text-text-secondary">
                         <Phone className="w-3.5 h-3.5 text-text-tertiary" />
                         <span className="font-mono">{formatPhoneNumber(agent.phoneNumber)}</span>
+                        <button
+                          onClick={() => handleUnassignNumber(agent.id, agent.name)}
+                          title={t.agents.unassignNumber}
+                          className="ml-1 p-0.5 rounded text-text-tertiary hover:text-danger-500 hover:bg-danger-50 transition-colors"
+                        >
+                          <PhoneOff className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     )}
                     {agent.forwardPhoneNumber && (

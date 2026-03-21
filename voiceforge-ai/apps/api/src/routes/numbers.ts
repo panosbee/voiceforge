@@ -206,8 +206,25 @@ numberRoutes.post('/assign', zValidator('json', assignNumberSchema), async (c) =
         });
         elevenlabsPhoneNumberId = elResult.phoneNumberId;
         log.info({ elevenlabsPhoneNumberId, agentId: agent.elevenlabsAgentId }, 'Phone number imported to ElevenLabs');
-      } catch (elErr) {
-        log.warn({ error: elErr, phoneNumber }, 'ElevenLabs phone import failed — can be retried from dashboard');
+      } catch (elErr: unknown) {
+        // If number already exists in ElevenLabs, find it and reassign to this agent
+        const errMsg = elErr instanceof Error ? elErr.message : String(elErr);
+        if (errMsg.includes('already exists')) {
+          log.info({ phoneNumber }, 'Phone number already in ElevenLabs — finding and reassigning');
+          try {
+            const allNumbers = await elevenlabsService.listPhoneNumbers();
+            const existing = allNumbers.find((n) => n.phoneNumber === phoneNumber);
+            if (existing) {
+              await elevenlabsService.updatePhoneNumberAgent(existing.phoneNumberId, agent.elevenlabsAgentId);
+              elevenlabsPhoneNumberId = existing.phoneNumberId;
+              log.info({ elevenlabsPhoneNumberId, agentId: agent.elevenlabsAgentId }, 'Existing phone number reassigned to agent');
+            }
+          } catch (reassignErr) {
+            log.warn({ error: reassignErr, phoneNumber }, 'Failed to reassign existing ElevenLabs phone number');
+          }
+        } else {
+          log.warn({ error: elErr, phoneNumber }, 'ElevenLabs phone import failed — can be retried from dashboard');
+        }
       }
     }
 
@@ -335,8 +352,24 @@ numberRoutes.post('/purchase', zValidator('json', purchaseNumberSchema), async (
         });
         elevenlabsPhoneNumberId = elResult.phoneNumberId;
         log.info({ elevenlabsPhoneNumberId, agentId: agent.elevenlabsAgentId }, 'Phone number imported to ElevenLabs');
-      } catch (elErr) {
-        log.warn({ error: elErr, phoneNumber }, 'ElevenLabs phone import failed — can be retried from dashboard');
+      } catch (elErr: unknown) {
+        const errMsg = elErr instanceof Error ? elErr.message : String(elErr);
+        if (errMsg.includes('already exists')) {
+          log.info({ phoneNumber }, 'Phone number already in ElevenLabs — finding and reassigning');
+          try {
+            const allNumbers = await elevenlabsService.listPhoneNumbers();
+            const existing = allNumbers.find((n) => n.phoneNumber === phoneNumber);
+            if (existing) {
+              await elevenlabsService.updatePhoneNumberAgent(existing.phoneNumberId, agent.elevenlabsAgentId);
+              elevenlabsPhoneNumberId = existing.phoneNumberId;
+              log.info({ elevenlabsPhoneNumberId }, 'Existing phone number reassigned');
+            }
+          } catch (reassignErr) {
+            log.warn({ error: reassignErr, phoneNumber }, 'Failed to reassign existing ElevenLabs phone number');
+          }
+        } else {
+          log.warn({ error: elErr, phoneNumber }, 'ElevenLabs phone import failed — can be retried from dashboard');
+        }
       }
     }
 
@@ -376,6 +409,65 @@ numberRoutes.post('/purchase', zValidator('json', purchaseNumberSchema), async (
     log.error({ error, phoneNumber, provider: provider.name }, 'Failed to purchase number');
     return c.json<ApiResponse>(
       { success: false, error: { code: 'TELEPHONY_ERROR', message: 'Failed to purchase phone number' } },
+      500,
+    );
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// POST /numbers/unassign — Remove phone number from agent
+// Clears agent DB record + optionally unassigns from ElevenLabs
+// The number stays purchased on Telnyx and can be reassigned later
+// ═══════════════════════════════════════════════════════════════════
+
+const unassignNumberSchema = z.object({
+  agentId: z.string().uuid(),
+});
+
+numberRoutes.post('/unassign', zValidator('json', unassignNumberSchema), async (c) => {
+  const user = c.get('user');
+  const { agentId } = c.req.valid('json');
+
+  const customer = await db.query.customers.findFirst({
+    where: eq(customers.userId, user.sub),
+  });
+
+  if (!customer) {
+    return c.json<ApiResponse>({ success: false, error: { code: 'NOT_FOUND', message: 'Customer not found' } }, 404);
+  }
+
+  const agent = await db.query.agents.findFirst({
+    where: and(eq(agents.id, agentId), eq(agents.customerId, customer.id)),
+  });
+
+  if (!agent) {
+    return c.json<ApiResponse>({ success: false, error: { code: 'NOT_FOUND', message: 'Agent not found' } }, 404);
+  }
+
+  if (!agent.phoneNumber) {
+    return c.json<ApiResponse>({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Agent has no phone number assigned' } }, 400);
+  }
+
+  try {
+    log.info({ agentId, phoneNumber: agent.phoneNumber }, 'Unassigning phone number from agent');
+
+    // Clear agent DB fields (keep the number on Telnyx for future use)
+    await db
+      .update(agents)
+      .set({
+        phoneNumber: null,
+        elevenlabsPhoneNumberId: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(agents.id, agentId));
+
+    log.info({ agentId, phoneNumber: agent.phoneNumber }, 'Phone number unassigned from agent');
+
+    return c.json<ApiResponse>({ success: true, data: { agentId, phoneNumber: agent.phoneNumber } });
+  } catch (error) {
+    log.error({ error, agentId }, 'Failed to unassign number');
+    return c.json<ApiResponse>(
+      { success: false, error: { code: 'TELEPHONY_ERROR', message: 'Failed to unassign phone number' } },
       500,
     );
   }
