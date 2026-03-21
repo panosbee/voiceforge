@@ -481,18 +481,24 @@ export async function createSipConnection(
   const connectionId = result.data.id;
 
   // Add the ElevenLabs SIP FQDN to this connection
-  await fetch('https://api.telnyx.com/v2/fqdns', {
+  const fqdnResponse = await fetch('https://api.telnyx.com/v2/fqdns', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${env.TELNYX_API_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      fqdn_connection_id: connectionId,
+      connection_id: connectionId,
       fqdn: 'sip.rtc.elevenlabs.io',
       port: 5060,
     }),
   });
+
+  if (!fqdnResponse.ok) {
+    const body = await fqdnResponse.text();
+    log.error({ status: fqdnResponse.status, body, connectionId }, 'Failed to create FQDN for SIP connection');
+    throw new Error(`FQDN creation failed: ${fqdnResponse.status}`);
+  }
 
   log.info({ connectionId }, 'SIP connection created → sip.rtc.elevenlabs.io:5060');
   return { connectionId };
