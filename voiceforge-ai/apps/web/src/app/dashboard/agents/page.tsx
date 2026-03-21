@@ -10,7 +10,7 @@ import { Button, Card, Badge, Spinner, EmptyState, PageHeader } from '@/componen
 import { api } from '@/lib/api-client';
 import { formatPhoneNumber, getIndustryLabels } from '@/lib/utils';
 import { useI18n } from '@/lib/i18n';
-import { Bot, Plus, Phone, Trash2, Pencil, Cpu, PhoneCall, PhoneForwarded, PhoneOff } from 'lucide-react';
+import { Bot, Plus, Phone, Trash2, Pencil, Cpu, PhoneCall, PhoneForwarded, PhoneOff, AlertTriangle, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { GREEK_VOICES, AI_PROVIDER } from '@voiceforge/shared';
 import type { AgentSummary, ApiResponse } from '@voiceforge/shared';
@@ -70,6 +70,21 @@ export default function AgentsPage() {
       }
     } catch {
       toast.error(t.agents.unassignError);
+    }
+  };
+
+  const handleReconnectNumber = async (agentId: string, phoneNumber: string) => {
+    try {
+      const result = await api.post<ApiResponse>('/api/numbers/assign', {
+        agentId,
+        phoneNumber,
+      });
+      if (result.success) {
+        toast.success(t.agents.reconnectSuccess);
+        loadAgents();
+      }
+    } catch {
+      toast.error(t.agents.reconnectError);
     }
   };
 
@@ -180,8 +195,19 @@ export default function AgentsPage() {
                   <div className="space-y-2 mb-4">
                     {agent.phoneNumber && (
                       <div className="flex items-center gap-2 text-sm text-text-secondary">
-                        <Phone className="w-3.5 h-3.5 text-text-tertiary" />
+                        <Phone className={`w-3.5 h-3.5 ${agent.elevenlabsPhoneNumberId ? 'text-text-tertiary' : 'text-yellow-500'}`} />
                         <span className="font-mono">{formatPhoneNumber(agent.phoneNumber)}</span>
+                        {/* Warning + Reconnect when ElevenLabs link is broken */}
+                        {!agent.elevenlabsPhoneNumberId && (
+                          <button
+                            onClick={() => handleReconnectNumber(agent.id, agent.phoneNumber!)}
+                            title={t.agents.reconnectNumber}
+                            className="ml-1 flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium text-yellow-700 bg-yellow-50 hover:bg-yellow-100 border border-yellow-200 transition-colors"
+                          >
+                            <AlertTriangle className="w-3 h-3" />
+                            <RefreshCw className="w-3 h-3" />
+                          </button>
+                        )}
                         <button
                           onClick={() => handleUnassignNumber(agent.id, agent.name)}
                           title={t.agents.unassignNumber}

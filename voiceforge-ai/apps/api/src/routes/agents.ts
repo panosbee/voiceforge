@@ -296,6 +296,7 @@ agentRoutes.get('/', async (c) => {
       status: agent.status,
       aiProvider: agent.aiProvider,
       elevenlabsAgentId: agent.elevenlabsAgentId,
+      elevenlabsPhoneNumberId: agent.elevenlabsPhoneNumberId,
       phoneNumber: agent.phoneNumber,
       forwardPhoneNumber: agent.forwardPhoneNumber,
       voiceId: agent.voiceId,

@@ -194,6 +194,9 @@ export interface Translations {
     unassignConfirm: string;
     unassignSuccess: string;
     unassignError: string;
+    reconnectNumber: string;
+    reconnectSuccess: string;
+    reconnectError: string;
     name: string;
     namePlaceholder: string;
     industry: string;

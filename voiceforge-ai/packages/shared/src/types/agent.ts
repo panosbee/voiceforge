@@ -163,6 +163,7 @@ export interface AgentSummary {
   status: AgentStatus;
   aiProvider: AiProvider;
   elevenlabsAgentId: string | null;
+  elevenlabsPhoneNumberId: string | null;
   phoneNumber: string | null;
   forwardPhoneNumber: string | null;
   voiceId: string;
