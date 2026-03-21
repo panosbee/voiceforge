@@ -15,12 +15,16 @@
 
 import { eq, and, gte, lte, desc } from 'drizzle-orm';
 import { db } from '../db/connection.js';
-import { agents, calls, customers, webhookEvents, appointments } from '../db/schema/index.js';
+import { agents, calls, customers, webhookEvents, appointments, callerMemories, agentTaskEmails, tasks } from '../db/schema/index.js';
 import { createLogger } from '../config/logger.js';
 import * as elevenlabsService from '../services/elevenlabs.js';
 import { parseDateTimeInTimezone } from '../services/timezone.js';
 import { extractAppointmentFromTranscript } from '../services/transcript-parser.js';
-import { notifyCallCompleted } from '../services/email.js';
+import { notifyCallCompleted, sendTaskNotificationEmail, isEmailConfigured } from '../services/email.js';
+import { getTelephonyProvider } from '../services/telephony/index.js';
+import { extractTasksFromTranscript } from '../services/task-extraction.js';
+import { generateConfirmToken } from '../routes/tasks.js';
+import { env } from '../config/env.js';
 
 const log = createLogger('conversation-sync');
 
@@ -88,7 +92,7 @@ async function syncAgentConversations(agent: {
   name: string;
   language: string;
   phoneNumber: string | null;
-  customer: { id: string; timezone: string; email: string; ownerName: string; locale: string };
+  customer: { id: string; timezone: string; email: string; ownerName: string; locale: string; phone: string | null };
 }): Promise<{ recorded: number; skipped: number }> {
   if (!agent.elevenlabsAgentId) return { recorded: 0, skipped: 0 };
 
@@ -182,7 +186,7 @@ async function recordMissedConversation(
     name: string;
     language: string;
     phoneNumber: string | null;
-    customer: { id: string; timezone: string; email: string; ownerName: string; locale: string };
+    customer: { id: string; timezone: string; email: string; ownerName: string; locale: string; phone: string | null };
   },
 ): Promise<{ callId: string } | null> {
   const full = await elevenlabsService.getConversation(conversationId) as Record<string, any>;
@@ -315,7 +319,105 @@ async function recordMissedConversation(
     locale: agent.customer.locale,
   });
 
-  // Create appointment if detected — with slot conflict resolution
+  // ── SMS Notification ────────────────────────────────────────
+  const smsProvider = getTelephonyProvider();
+  if (smsProvider.isSmsConfigured() && agent.customer.phone) {
+    try {
+      await smsProvider.sendCallSummarySms({
+        to: agent.customer.phone,
+        callerPhone: callRecord.callerNumber,
+        agentName: agent.name,
+        durationSeconds,
+        summary: summary ?? 'Δεν υπάρχει διαθέσιμη περίληψη.',
+        appointmentBooked,
+      });
+      log.info({ callId: callRecord.id, to: agent.customer.phone }, 'Call summary SMS sent');
+    } catch (smsErr) {
+      log.error({ error: smsErr, callId: callRecord.id }, 'Failed to send call summary SMS');
+    }
+  }
+
+  // ── Post-Call Task Extraction ───────────────────────────────
+  if (transcriptText) {
+    try {
+      const taskEmailRecipients = await db.query.agentTaskEmails.findMany({
+        where: eq(agentTaskEmails.agentId, agent.id),
+        orderBy: [agentTaskEmails.sortOrder],
+      });
+
+      if (taskEmailRecipients.length > 0) {
+        log.info({ agentId: agent.id, recipientCount: taskEmailRecipients.length }, '📋 Starting post-call task extraction (sync worker)');
+
+        const extraction = await extractTasksFromTranscript({
+          transcript: transcriptText,
+          agentName: agent.name,
+          roles: taskEmailRecipients.map((r) => ({
+            roleLabel: r.roleLabel,
+            roleDescription: r.roleDescription,
+          })),
+          callerPhone: callRecord.callerNumber !== 'synced' ? callRecord.callerNumber : undefined,
+          language: agent.language,
+        });
+
+        log.info({ hasTasks: extraction.hasTasks, taskCount: extraction.tasks.length }, '🤖 Task extraction complete (sync worker)');
+
+        if (extraction.hasTasks) {
+          for (const extractedTask of extraction.tasks) {
+            const matchedRecipient = taskEmailRecipients.find(
+              (r) => r.roleLabel === extractedTask.matchedRole,
+            ) ?? taskEmailRecipients[0]!;
+
+            const taskId = crypto.randomUUID();
+            const confirmToken = generateConfirmToken(taskId);
+
+            await db.insert(tasks).values({
+              id: taskId,
+              customerId: agent.customerId,
+              agentId: agent.id,
+              callId: callRecord.id,
+              taskEmailId: matchedRecipient.id,
+              title: extractedTask.title,
+              description: extractedTask.description,
+              actionRequired: extractedTask.actionRequired,
+              assignedEmail: matchedRecipient.email,
+              assignedRole: matchedRecipient.roleLabel,
+              status: 'pending',
+              priority: extractedTask.priority as 'low' | 'normal' | 'high' | 'urgent',
+              confirmToken,
+              callerName: extractedTask.callerName,
+              callerPhone: extractedTask.callerPhone,
+              callerEmail: extractedTask.callerEmail,
+            });
+
+            log.info({ taskId, callId: callRecord.id, role: matchedRecipient.roleLabel, title: extractedTask.title }, '✅ Task created (sync worker)');
+
+            if (isEmailConfigured()) {
+              const confirmUrl = `${env.API_BASE_URL}/api/tasks/confirm/${taskId}?token=${confirmToken}`;
+              await sendTaskNotificationEmail({
+                to: matchedRecipient.email,
+                taskTitle: extractedTask.title,
+                taskDescription: extractedTask.description,
+                actionRequired: extractedTask.actionRequired,
+                priority: extractedTask.priority,
+                callerName: extractedTask.callerName,
+                callerPhone: extractedTask.callerPhone,
+                callerEmail: extractedTask.callerEmail,
+                agentName: agent.name,
+                confirmUrl,
+                transcript: transcriptText,
+                locale: agent.customer.locale,
+              });
+              log.info({ taskId, email: matchedRecipient.email }, '📧 Task email sent (sync worker)');
+            }
+          }
+        }
+      }
+    } catch (taskErr) {
+      log.error({ error: taskErr, callId: callRecord.id }, 'Post-call task extraction failed (sync worker) — non-blocking');
+    }
+  }
+
+  // ── Store Appointment if Booked — with dedup against server tool ──
   if (appointmentBooked) {
     try {
       const customerTz = agent.customer.timezone || 'Europe/Athens';
@@ -323,43 +425,172 @@ async function recordMissedConversation(
         ? parseDateTimeInTimezone(appointmentDate, appointmentTime, customerTz)
         : new Date();
 
-      // Slot conflict check ±30 minutes
+      // Check if book_appointment server tool already created this appointment
       const slotStart = new Date(scheduledAt.getTime() - 30 * 60 * 1000);
       const slotEnd = new Date(scheduledAt.getTime() + 30 * 60 * 1000);
-      const conflicting = await db.query.appointments.findMany({
+      const existingAppointments = await db.query.appointments.findMany({
         where: and(
           eq(appointments.customerId, agent.customerId),
+          eq(appointments.agentId, agent.id),
           gte(appointments.scheduledAt, slotStart),
           lte(appointments.scheduledAt, slotEnd),
         ),
         orderBy: [desc(appointments.scheduledAt)],
       });
 
-      if (conflicting.length > 0) {
-        const lastConflict = conflicting[0]!;
-        const conflictEnd = new Date(lastConflict.scheduledAt.getTime() + (lastConflict.durationMinutes || 30) * 60 * 1000);
-        scheduledAt = conflictEnd;
-        log.info(
-          { originalSlot: `${appointmentDate} ${appointmentTime}`, movedTo: scheduledAt.toISOString(), conflicts: conflicting.length },
-          'Slot conflict — moved to next available slot',
-        );
-      }
+      if (existingAppointments.length > 0) {
+        // Appointment already exists — just link to call
+        const existing = existingAppointments[0]!;
+        if (!existing.callId) {
+          await db.update(appointments)
+            .set({ callId: callRecord.id })
+            .where(eq(appointments.id, existing.id));
+        }
+        log.info({ callId: callRecord.id, appointmentId: existing.id }, 'Existing appointment linked to call (sync worker)');
+      } else {
+        // Slot conflict check for new appointment
+        const conflicting = await db.query.appointments.findMany({
+          where: and(
+            eq(appointments.customerId, agent.customerId),
+            gte(appointments.scheduledAt, slotStart),
+            lte(appointments.scheduledAt, slotEnd),
+          ),
+          orderBy: [desc(appointments.scheduledAt)],
+        });
 
-      await db.insert(appointments).values({
-        customerId: agent.customerId,
-        agentId: agent.id,
-        callId: callRecord.id,
-        callerName: appointmentCallerName ?? 'Synced caller',
-        callerPhone: appointmentCallerPhone,
-        scheduledAt,
-        notes: appointmentReason ?? summary ?? null,
-        status: 'pending',
-      });
-      log.info({ callId: callRecord.id, scheduledAt: scheduledAt.toISOString() }, 'Appointment created from synced conversation');
+        if (conflicting.length > 0) {
+          const lastConflict = conflicting[0]!;
+          const conflictEnd = new Date(lastConflict.scheduledAt.getTime() + (lastConflict.durationMinutes || 30) * 60 * 1000);
+          scheduledAt = conflictEnd;
+          log.info(
+            { originalSlot: `${appointmentDate} ${appointmentTime}`, movedTo: scheduledAt.toISOString(), conflicts: conflicting.length },
+            'Slot conflict — moved to next available slot',
+          );
+        }
+
+        await db.insert(appointments).values({
+          customerId: agent.customerId,
+          agentId: agent.id,
+          callId: callRecord.id,
+          callerName: appointmentCallerName ?? 'Synced caller',
+          callerPhone: appointmentCallerPhone,
+          scheduledAt,
+          notes: appointmentReason ?? summary ?? null,
+          status: 'pending',
+        });
+        log.info({ callId: callRecord.id, scheduledAt: scheduledAt.toISOString() }, 'Appointment created from synced conversation');
+      }
     } catch (aptErr) {
       log.error({ error: aptErr, callId: callRecord.id }, 'Failed to create appointment from synced conversation');
     }
   }
 
+  // ── Episodic Memory — Update Caller Memory ──────────────────
+  const callerNumber = callRecord.callerNumber;
+  if (callerNumber && callerNumber !== 'synced' && callerNumber !== 'unknown') {
+    try {
+      const memorySummary = summary || transcriptText?.slice(0, 500) || 'Κλήση χωρίς περίληψη.';
+
+      const newFacts: string[] = [];
+      if (extractedData.caller_name) newFacts.push(`Όνομα: ${extractedData.caller_name}`);
+      if (extractedData.appointment_reason) newFacts.push(`Ενδιαφέρον: ${extractedData.appointment_reason}`);
+      if (extractedData.caller_intent) newFacts.push(`Πρόθεση: ${extractedData.caller_intent}`);
+      if (appointmentBooked) newFacts.push(`Κλείστηκε ραντεβού`);
+      if (appointmentDate) newFacts.push(`Ραντεβού: ${appointmentDate} ${appointmentTime}`);
+
+      const existingMemory = await db.query.callerMemories.findFirst({
+        where: and(
+          eq(callerMemories.customerId, agent.customerId),
+          eq(callerMemories.callerPhone, callerNumber),
+        ),
+      });
+
+      if (existingMemory) {
+        const previousFacts = (existingMemory.keyFacts as string[]) || [];
+        const mergedFacts = [...new Set([...previousFacts, ...newFacts])].slice(0, 20);
+
+        const updatedSummary = existingMemory.callCount <= 5
+          ? `${existingMemory.summary}\n---\n[Κλήση #${existingMemory.callCount + 1}]: ${memorySummary}`
+          : compactMemorySummary(existingMemory.summary, memorySummary, existingMemory.callCount + 1);
+
+        const existingPrefs = (existingMemory.preferences as Record<string, unknown>) || {};
+        const newPrefs = {
+          ...existingPrefs,
+          ...(extractedData.appointment_reason ? { last_service_interest: extractedData.appointment_reason } : {}),
+          ...(extractedData.appointment_time ? { preferred_time: extractedData.appointment_time } : {}),
+          ...(extractedData.caller_intent ? { last_intent: extractedData.caller_intent } : {}),
+        };
+
+        const prevAvg = existingMemory.overallSentiment ?? 3;
+        const newAvg = sentimentScore
+          ? Math.round((prevAvg * existingMemory.callCount + sentimentScore) / (existingMemory.callCount + 1))
+          : prevAvg;
+
+        await db.update(callerMemories)
+          .set({
+            summary: updatedSummary,
+            keyFacts: mergedFacts,
+            preferences: newPrefs,
+            callerName: extractedData.caller_name || existingMemory.callerName,
+            overallSentiment: newAvg,
+            lastSentiment: sentimentScore ?? existingMemory.lastSentiment,
+            callCount: existingMemory.callCount + 1,
+            totalDurationSeconds: existingMemory.totalDurationSeconds + durationSeconds,
+            appointmentsBooked: existingMemory.appointmentsBooked + (appointmentBooked ? 1 : 0),
+            lastCallId: callRecord.id,
+            lastCallAt: new Date(),
+            agentId: agent.id,
+            updatedAt: new Date(),
+          })
+          .where(eq(callerMemories.id, existingMemory.id));
+
+        log.info({ callerPhone: callerNumber, memoryId: existingMemory.id, callCount: existingMemory.callCount + 1 }, 'Caller memory updated (sync worker)');
+      } else {
+        const [newMemory] = await db.insert(callerMemories).values({
+          customerId: agent.customerId,
+          agentId: agent.id,
+          callerPhone: callerNumber,
+          callerName: extractedData.caller_name ?? null,
+          summary: `[Κλήση #1]: ${memorySummary}`,
+          keyFacts: newFacts,
+          preferences: {
+            ...(extractedData.appointment_reason ? { last_service_interest: extractedData.appointment_reason } : {}),
+            ...(extractedData.caller_intent ? { last_intent: extractedData.caller_intent } : {}),
+          },
+          overallSentiment: sentimentScore,
+          lastSentiment: sentimentScore,
+          callCount: 1,
+          totalDurationSeconds: durationSeconds,
+          appointmentsBooked: appointmentBooked ? 1 : 0,
+          lastCallId: callRecord.id,
+          lastCallAt: new Date(),
+          firstCallAt: new Date(),
+        }).returning();
+
+        log.info({ callerPhone: callerNumber, memoryId: newMemory?.id }, 'New caller memory created (sync worker)');
+      }
+    } catch (memoryErr) {
+      log.error({ error: memoryErr, callerNumber }, 'Failed to update caller memory (sync worker)');
+    }
+  }
+
   return { callId: callRecord.id };
+}
+
+// ── Helper: Compact Memory Summary ────────────────────────────
+function compactMemorySummary(existingSummary: string, newCallSummary: string, callNumber: number): string {
+  const callEntries = existingSummary.split('\n---\n');
+  const recentEntries = callEntries.slice(-3);
+  const olderCount = callEntries.length - 3;
+  const compactHeader = olderCount > 0
+    ? `[Σύνοψη ${olderCount} παλαιότερων κλήσεων]: Ο πελάτης έχει καλέσει ${olderCount} φορές πριν.`
+    : '';
+  const parts = [compactHeader, ...recentEntries, `[Κλήση #${callNumber}]: ${newCallSummary}`].filter(Boolean);
+  let result = parts.join('\n---\n');
+  if (result.length > 2000) {
+    result = result.slice(-2000);
+    const firstSep = result.indexOf('\n---\n');
+    if (firstSep > 0) result = result.slice(firstSep + 5);
+  }
+  return result;
 }
