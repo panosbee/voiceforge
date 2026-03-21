@@ -151,9 +151,9 @@ export default function OnboardingPage() {
       const agentId = agentResult.data!.id;
       toast.success(t.onboarding.agentCreated);
 
-      // 3. Purchase phone number & assign to agent
+      // 3. Assign owned phone number to agent
       if (data.selectedNumber) {
-        const numberResult = await api.post<ApiResponse<{ phoneNumber: string }>>('/api/numbers/purchase', {
+        const numberResult = await api.post<ApiResponse<{ phoneNumber: string }>>('/api/numbers/assign', {
           phoneNumber: data.selectedNumber,
           agentId,
         });

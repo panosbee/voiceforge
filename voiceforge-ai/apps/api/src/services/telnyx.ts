@@ -224,6 +224,14 @@ export interface AvailableNumber {
   region: string;
 }
 
+export interface OwnedNumber {
+  phoneNumber: string;
+  status: string;
+  connectionId: string | null;
+  monthlyCost: string;
+  currency: string;
+}
+
 /**
  * Search available Greek phone numbers on a customer's sub-account.
  */
@@ -353,6 +361,55 @@ export async function searchAvailableNumbersMaster(
   }
 
   log.info({ count: numbers.length }, 'Available numbers found (master)');
+  return numbers;
+}
+
+/**
+ * List phone numbers owned by the master Telnyx account.
+ * Calls GET /v2/phone_numbers (owned numbers, NOT the marketplace).
+ * Only returns numbers with status = "active".
+ */
+export async function listOwnedNumbersMaster(): Promise<OwnedNumber[]> {
+  if (!isTelnyxConfigured()) {
+    log.warn('Telnyx not configured — returning empty owned number list');
+    return [];
+  }
+
+  log.info('Listing owned phone numbers (master key)');
+
+  const url = new URL('https://api.telnyx.com/v2/phone_numbers');
+  url.searchParams.set('filter[status]', 'active');
+  url.searchParams.set('page[size]', '100');
+
+  const response = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${env.TELNYX_API_KEY}` },
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    log.error({ status: response.status, body }, 'Failed to list owned numbers');
+    throw new Error(`Owned number listing failed: ${response.status}`);
+  }
+
+  const result = (await response.json()) as {
+    data: Array<{
+      id: string;
+      phone_number: string;
+      status: string;
+      connection_id: string | null;
+      billing?: { monthly_cost?: string; currency?: string };
+    }>;
+  };
+
+  const numbers: OwnedNumber[] = result.data.map((rec) => ({
+    phoneNumber: rec.phone_number,
+    status: rec.status,
+    connectionId: rec.connection_id ?? null,
+    monthlyCost: rec.billing?.monthly_cost ?? '0',
+    currency: rec.billing?.currency ?? 'USD',
+  }));
+
+  log.info({ count: numbers.length }, 'Owned numbers retrieved');
   return numbers;
 }
 

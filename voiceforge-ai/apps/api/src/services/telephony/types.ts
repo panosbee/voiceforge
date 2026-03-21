@@ -39,6 +39,17 @@ export interface AssignNumberResult {
 }
 
 /**
+ * A phone number owned/purchased on the account.
+ */
+export interface OwnedNumber {
+  phoneNumber: string;
+  status: string;
+  connectionId: string | null;
+  monthlyCost: string;
+  currency: string;
+}
+
+/**
  * Options for searching available numbers.
  */
 export interface SearchNumbersOptions {
@@ -77,6 +88,9 @@ export interface TelephonyProvider {
 
   /** Search available Greek phone numbers */
   searchAvailableNumbers(options?: SearchNumbersOptions): Promise<AvailableNumber[]>;
+
+  /** List phone numbers owned/purchased on the master account */
+  listOwnedNumbers(): Promise<OwnedNumber[]>;
 
   /** Purchase a phone number */
   purchasePhoneNumber(phoneNumber: string): Promise<PurchaseResult>;

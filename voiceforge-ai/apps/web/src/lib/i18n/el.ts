@@ -382,6 +382,9 @@ export const el: Translations = {
     connected: 'Ο αριθμός συνδέθηκε!',
     callNowNote: 'Μπορείτε τώρα να καλέσετε τον αριθμό και ο AI βοηθός θα απαντήσει!',
     done: 'Τέλεια!',
+    activeLabel: 'Ενεργός',
+    assignAndConnect: 'Αντιστοίχιση & Σύνδεση',
+    assignNote: 'Ο αριθμός θα συνδεθεί αυτόματα (SIP trunk) με τον AI βοηθό στο ElevenLabs.',
   },
 
   // ── Calls ──────────────────────────────────────────────────────
@@ -1040,7 +1043,7 @@ export const el: Translations = {
     testAgentError: 'Σφάλμα δημιουργίας δοκιμαστικού βοηθού',
     testConnectionError: 'Σφάλμα σύνδεσης',
     numberTitle: 'Επιλέξτε Τηλεφωνικό Αριθμό',
-    numberSubtitle: 'Αναζητήστε διαθέσιμους ελληνικούς αριθμούς για τον βοηθό σας.',
+    numberSubtitle: 'Επιλέξτε έναν διαθέσιμο αριθμό για τον βοηθό σας.',
     numberSearch: 'Περιοχή (π.χ. Αθήνα, Θεσσαλονίκη)',
     numberSearchBtn: 'Αναζήτηση',
     numberSearching: 'Αναζήτηση αριθμών...',
@@ -1049,6 +1052,7 @@ export const el: Translations = {
     numberPerMonth: '/μήνα',
     numberSkipNote: 'Μπορείτε να παραλείψετε αυτό το βήμα και να αγοράσετε αριθμό αργότερα.',
     numberSearchError: 'Σφάλμα αναζήτησης αριθμών',
+    numberActive: 'Ενεργός',
     reviewTitle: 'Σύνοψη Εγκατάστασης',
     reviewSubtitle: 'Ελέγξτε τα στοιχεία σας πριν ξεκινήσουμε.',
     reviewBusiness: 'Επιχείρηση',

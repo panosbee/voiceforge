@@ -1,26 +1,26 @@
 // ═══════════════════════════════════════════════════════════════════
 // VoiceForge AI — Assign Phone Number Modal
-// Search Greek +30 numbers from Telnyx, purchase + SIP wire to agent
+// Shows owned/active numbers and assigns to agent via SIP + ElevenLabs
 // ═══════════════════════════════════════════════════════════════════
 
 'use client';
 
-import { useState } from 'react';
-import { Button, Input, Spinner } from '@/components/ui';
+import { useState, useEffect } from 'react';
+import { Button, Spinner } from '@/components/ui';
 import { api } from '@/lib/api-client';
 import { formatPhoneNumber } from '@/lib/utils';
 import { useI18n } from '@/lib/i18n';
-import { X, Phone, Search, CheckCircle, AlertCircle } from 'lucide-react';
+import { X, Phone, CheckCircle, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import type { ApiResponse } from '@voiceforge/shared';
 
-interface AvailableNumber {
+interface OwnedNumber {
   phoneNumber: string;
+  status: string;
+  connectionId: string | null;
   monthlyCost: string;
-  upfrontCost: string;
   currency: string;
-  features: string[];
-  region: string;
+  assigned: boolean;
 }
 
 interface AssignNumberModalProps {
@@ -32,62 +32,51 @@ interface AssignNumberModalProps {
 
 export function AssignNumberModal({ agentId, agentName, onClose, onAssigned }: AssignNumberModalProps) {
   const { t } = useI18n();
-  const [locality, setLocality] = useState('');
-  const [numbers, setNumbers] = useState<AvailableNumber[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
+  const [numbers, setNumbers] = useState<OwnedNumber[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedNumber, setSelectedNumber] = useState<string | null>(null);
-  const [isPurchasing, setIsPurchasing] = useState(false);
-  const [purchaseResult, setPurchaseResult] = useState<{
+  const [isAssigning, setIsAssigning] = useState(false);
+  const [assignResult, setAssignResult] = useState<{
     phoneNumber: string;
     elevenlabsConfigured: boolean;
     sipConfigured: boolean;
   } | null>(null);
 
-  const handleSearch = async () => {
-    setIsSearching(true);
-    setNumbers([]);
-    setSelectedNumber(null);
+  useEffect(() => {
+    loadOwnedNumbers();
+  }, []);
 
+  const loadOwnedNumbers = async () => {
+    setIsLoading(true);
     try {
-      const params = new URLSearchParams({ limit: '10' });
-      if (locality.trim()) {
-        params.set('locality', locality.trim());
-      }
-
-      const result = await api.get<ApiResponse<AvailableNumber[]>>(
-        `/api/numbers/available?${params.toString()}`,
-      );
-
+      const result = await api.get<ApiResponse<OwnedNumber[]>>('/api/numbers/owned');
       if (result.success && result.data) {
         setNumbers(result.data);
-        if (result.data.length === 0) {
-          toast.info(t.assignNumber.noResults);
-        }
       }
     } catch {
       toast.error(t.assignNumber.searchError);
     } finally {
-      setIsSearching(false);
+      setIsLoading(false);
     }
   };
 
-  const handlePurchase = async () => {
+  const handleAssign = async () => {
     if (!selectedNumber) return;
 
-    setIsPurchasing(true);
+    setIsAssigning(true);
     try {
       const result = await api.post<ApiResponse<{
         phoneNumber: string;
         elevenlabsConfigured: boolean;
         sipConfigured: boolean;
         note: string;
-      }>>('/api/numbers/purchase', {
+      }>>('/api/numbers/assign', {
         phoneNumber: selectedNumber,
         agentId,
       });
 
       if (result.success && result.data) {
-        setPurchaseResult({
+        setAssignResult({
           phoneNumber: result.data.phoneNumber,
           elevenlabsConfigured: result.data.elevenlabsConfigured,
           sipConfigured: result.data.sipConfigured,
@@ -97,12 +86,14 @@ export function AssignNumberModal({ agentId, agentName, onClose, onAssigned }: A
     } catch {
       toast.error(t.assignNumber.purchaseError);
     } finally {
-      setIsPurchasing(false);
+      setIsAssigning(false);
     }
   };
 
+  const availableNumbers = numbers.filter((n) => !n.assigned);
+
   // Success screen
-  if (purchaseResult) {
+  if (assignResult) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
         <div className="bg-surface rounded-2xl shadow-modal w-full max-w-md overflow-hidden">
@@ -114,11 +105,11 @@ export function AssignNumberModal({ agentId, agentName, onClose, onAssigned }: A
               {t.assignNumber.connected}
             </h2>
             <p className="text-2xl font-mono font-semibold text-brand-600 mb-4">
-              {formatPhoneNumber(purchaseResult.phoneNumber)}
+              {formatPhoneNumber(assignResult.phoneNumber)}
             </p>
             <div className="space-y-2 text-sm text-text-secondary mb-6">
               <div className="flex items-center justify-center gap-2">
-                {purchaseResult.sipConfigured ? (
+                {assignResult.sipConfigured ? (
                   <CheckCircle className="w-4 h-4 text-green-500" />
                 ) : (
                   <AlertCircle className="w-4 h-4 text-yellow-500" />
@@ -126,7 +117,7 @@ export function AssignNumberModal({ agentId, agentName, onClose, onAssigned }: A
                 <span>SIP Trunk (Telnyx → ElevenLabs)</span>
               </div>
               <div className="flex items-center justify-center gap-2">
-                {purchaseResult.elevenlabsConfigured ? (
+                {assignResult.elevenlabsConfigured ? (
                   <CheckCircle className="w-4 h-4 text-green-500" />
                 ) : (
                   <AlertCircle className="w-4 h-4 text-yellow-500" />
@@ -134,7 +125,7 @@ export function AssignNumberModal({ agentId, agentName, onClose, onAssigned }: A
                 <span>ElevenLabs Agent Assignment</span>
               </div>
             </div>
-            {purchaseResult.elevenlabsConfigured && purchaseResult.sipConfigured && (
+            {assignResult.elevenlabsConfigured && assignResult.sipConfigured && (
               <p className="text-sm text-green-600 font-medium mb-4">
                 {t.assignNumber.callNowNote}
               </p>
@@ -171,39 +162,15 @@ export function AssignNumberModal({ agentId, agentName, onClose, onAssigned }: A
           </button>
         </div>
 
-        {/* Search */}
-        <div className="px-6 py-4 border-b border-border shrink-0">
-          <div className="flex gap-2">
-            <div className="flex-1">
-              <Input
-                placeholder={t.assignNumber.searchPlaceholder}
-                value={locality}
-                onChange={(e) => setLocality(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              />
-            </div>
-            <Button
-              onClick={handleSearch}
-              isLoading={isSearching}
-              leftIcon={<Search className="w-4 h-4" />}
-            >
-              {t.common.search}
-            </Button>
-          </div>
-          <p className="text-xs text-text-tertiary mt-1.5">
-            {t.assignNumber.searchHint}
-          </p>
-        </div>
-
         {/* Results */}
         <div className="flex-1 overflow-y-auto px-6 py-3">
-          {isSearching ? (
+          {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <Spinner size="lg" />
             </div>
-          ) : numbers.length > 0 ? (
+          ) : availableNumbers.length > 0 ? (
             <div className="space-y-2">
-              {numbers.map((num) => (
+              {availableNumbers.map((num) => (
                 <button
                   key={num.phoneNumber}
                   onClick={() => setSelectedNumber(num.phoneNumber)}
@@ -219,28 +186,28 @@ export function AssignNumberModal({ agentId, agentName, onClose, onAssigned }: A
                     }`}>
                       <Phone className="w-4 h-4" />
                     </div>
-                    <span className="font-mono font-medium text-text-primary">
-                      {formatPhoneNumber(num.phoneNumber)}
-                    </span>
+                    <div>
+                      <span className="font-mono font-medium text-text-primary">
+                        {formatPhoneNumber(num.phoneNumber)}
+                      </span>
+                      <span className="flex items-center text-xs text-green-600 mt-0.5">
+                        <CheckCircle className="w-3 h-3 mr-1" /> {t.assignNumber.activeLabel}
+                      </span>
+                    </div>
                   </div>
                   <div className="text-right">
                     <span className="text-sm font-semibold text-text-primary">
                       ${num.monthlyCost}{t.common.perMonth}
                     </span>
-                    {num.upfrontCost !== '0' && (
-                      <span className="text-xs text-text-tertiary block">
-                        + ${num.upfrontCost} {t.common.oneTime}
-                      </span>
-                    )}
                   </div>
                 </button>
               ))}
             </div>
-          ) : !isSearching && (
+          ) : (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Phone className="w-10 h-10 text-text-tertiary mb-3" />
               <p className="text-sm text-text-tertiary">
-                {t.assignNumber.searchPrompt}
+                {t.assignNumber.noResults}
               </p>
             </div>
           )}
@@ -254,15 +221,15 @@ export function AssignNumberModal({ agentId, agentName, onClose, onAssigned }: A
                 {t.assignNumber.selected} <span className="font-mono font-semibold">{formatPhoneNumber(selectedNumber)}</span>
               </div>
               <Button
-                onClick={handlePurchase}
-                isLoading={isPurchasing}
+                onClick={handleAssign}
+                isLoading={isAssigning}
                 leftIcon={<CheckCircle className="w-4 h-4" />}
               >
-                {isPurchasing ? t.assignNumber.connecting : t.assignNumber.purchaseAndConnect}
+                {isAssigning ? t.assignNumber.connecting : t.assignNumber.assignAndConnect}
               </Button>
             </div>
             <p className="text-xs text-text-tertiary mt-1.5">
-              {t.assignNumber.purchaseNote}
+              {t.assignNumber.assignNote}
             </p>
           </div>
         )}

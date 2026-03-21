@@ -6,6 +6,7 @@
 import type {
   TelephonyProvider,
   AvailableNumber,
+  OwnedNumber,
   PurchaseResult,
   SipConnectionResult,
   AssignNumberResult,
@@ -36,6 +37,10 @@ export class TelnyxProvider implements TelephonyProvider {
     });
     // Map from telnyx AvailableNumber to our interface (same shape)
     return result;
+  }
+
+  async listOwnedNumbers(): Promise<OwnedNumber[]> {
+    return telnyxService.listOwnedNumbersMaster();
   }
 
   async purchasePhoneNumber(phoneNumber: string): Promise<PurchaseResult> {

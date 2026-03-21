@@ -1,16 +1,16 @@
 // ═══════════════════════════════════════════════════════════════════
 // Onboarding Step 4 — Phone Number Selection
-// Search and select a Greek +30 phone number
+// Shows owned/active numbers from the platform's Telnyx account
 // ═══════════════════════════════════════════════════════════════════
 
 'use client';
 
-import { useState, useCallback } from 'react';
-import { Button, Input } from '@/components/ui';
+import { useState, useEffect } from 'react';
+import { Button } from '@/components/ui';
 import { Spinner } from '@/components/ui';
 import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
-import { Phone, Search, MapPin } from 'lucide-react';
+import { Phone, CheckCircle } from 'lucide-react';
 import { api } from '@/lib/api-client';
 import { toast } from 'sonner';
 import type { ApiResponse } from '@voiceforge/shared';
@@ -23,45 +23,37 @@ interface StepNumberProps {
   onBack: () => void;
 }
 
-interface AvailableNumber {
+interface OwnedNumber {
   phoneNumber: string;
+  status: string;
+  connectionId: string | null;
   monthlyCost: string;
-  upfrontCost: string;
   currency: string;
-  features: string[];
-  region: string;
+  assigned: boolean;
 }
 
 export function StepNumber({ data, updateData, onNext, onBack }: StepNumberProps) {
   const { t } = useI18n();
-  const [numbers, setNumbers] = useState<AvailableNumber[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
-  const [locality, setLocality] = useState('');
+  const [numbers, setNumbers] = useState<OwnedNumber[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const searchNumbers = useCallback(async () => {
-    setIsSearching(true);
-    setHasSearched(true);
+  useEffect(() => {
+    loadOwnedNumbers();
+  }, []);
+
+  const loadOwnedNumbers = async () => {
+    setIsLoading(true);
     try {
-      const result = await api.get<ApiResponse<AvailableNumber[]>>('/api/numbers/available', {
-        params: {
-          ...(locality ? { locality } : {}),
-          limit: 10,
-        },
-      });
-
+      const result = await api.get<ApiResponse<OwnedNumber[]>>('/api/numbers/owned');
       if (result.success && result.data) {
         setNumbers(result.data);
-        if (result.data.length === 0) {
-          toast.info(t.onboarding.numberNoResults);
-        }
       }
     } catch {
       toast.error(t.onboarding.numberSearchError);
     } finally {
-      setIsSearching(false);
+      setIsLoading(false);
     }
-  }, [locality]);
+  };
 
   const formatPhone = (phone: string) => {
     if (phone.startsWith('+30')) {
@@ -71,6 +63,8 @@ export function StepNumber({ data, updateData, onNext, onBack }: StepNumberProps
     return phone;
   };
 
+  const availableNumbers = numbers.filter((n) => !n.assigned);
+
   return (
     <div className="bg-surface border border-border rounded-xl shadow-card p-8">
       <h2 className="text-xl font-semibold text-text-primary mb-2">{t.onboarding.numberTitle}</h2>
@@ -78,40 +72,26 @@ export function StepNumber({ data, updateData, onNext, onBack }: StepNumberProps
         {t.onboarding.numberSubtitle}
       </p>
 
-      {/* Search Controls */}
-      <div className="flex gap-3 mb-6">
-        <div className="flex-1">
-          <Input
-            placeholder={t.onboarding.numberSearch}
-            value={locality}
-            onChange={(e) => setLocality(e.target.value)}
-            className="h-11"
-          />
-        </div>
-        <Button onClick={searchNumbers} isLoading={isSearching} leftIcon={<Search className="w-4 h-4" />}>
-          {t.onboarding.numberSearchBtn}
-        </Button>
-      </div>
-
-      {/* Number Results */}
-      {isSearching && (
+      {/* Loading */}
+      {isLoading && (
         <div className="flex items-center justify-center py-12">
           <Spinner size="lg" />
           <span className="ml-3 text-text-secondary">{t.onboarding.numberSearching}</span>
         </div>
       )}
 
-      {!isSearching && hasSearched && numbers.length === 0 && (
+      {/* No available numbers */}
+      {!isLoading && availableNumbers.length === 0 && (
         <div className="text-center py-12">
           <Phone className="w-10 h-10 text-text-tertiary mx-auto mb-3" />
           <p className="text-text-secondary">{t.onboarding.numberNoResults}</p>
-          <p className="text-sm text-text-tertiary mt-1">{t.onboarding.numberTryDifferent}</p>
         </div>
       )}
 
-      {!isSearching && numbers.length > 0 && (
+      {/* Number list */}
+      {!isLoading && availableNumbers.length > 0 && (
         <div className="space-y-2 max-h-80 overflow-y-auto">
-          {numbers.map((num) => (
+          {availableNumbers.map((num) => (
             <button
               key={num.phoneNumber}
               type="button"
@@ -131,14 +111,9 @@ export function StepNumber({ data, updateData, onNext, onBack }: StepNumberProps
               <Phone className={cn('w-5 h-5 shrink-0', data.selectedNumber === num.phoneNumber ? 'text-brand-600' : 'text-text-tertiary')} />
               <div className="flex-1 min-w-0">
                 <p className="font-mono text-base font-medium text-text-primary">{formatPhone(num.phoneNumber)}</p>
-                <div className="flex items-center gap-3 mt-0.5">
-                  <span className="flex items-center text-xs text-text-tertiary">
-                    <MapPin className="w-3 h-3 mr-1" /> {num.region}
-                  </span>
-                  {num.features.length > 0 && (
-                    <span className="text-xs text-text-tertiary">{num.features.join(', ')}</span>
-                  )}
-                </div>
+                <span className="flex items-center text-xs text-green-600 mt-0.5">
+                  <CheckCircle className="w-3 h-3 mr-1" /> {t.onboarding.numberActive}
+                </span>
               </div>
               <div className="text-right shrink-0">
                 <p className="text-sm font-medium text-text-primary">{num.monthlyCost} {num.currency}{t.onboarding.numberPerMonth}</p>

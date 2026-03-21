@@ -322,6 +322,9 @@ export interface Translations {
     connected: string;
     callNowNote: string;
     done: string;
+    activeLabel: string;
+    assignAndConnect: string;
+    assignNote: string;
   };
 
   // ── Calls ──────────────────────────────────────────────────────
@@ -989,6 +992,7 @@ export interface Translations {
     numberPerMonth: string;
     numberSkipNote: string;
     numberSearchError: string;
+    numberActive: string;
     // Step Review
     reviewTitle: string;
     reviewSubtitle: string;

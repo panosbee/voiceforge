@@ -382,6 +382,9 @@ export const en: Translations = {
     connected: 'Number connected!',
     callNowNote: 'You can now call the number and the AI assistant will answer!',
     done: 'Done!',
+    activeLabel: 'Active',
+    assignAndConnect: 'Assign & Connect',
+    assignNote: 'The number will be automatically connected (SIP trunk) with the AI assistant on ElevenLabs.',
   },
 
   // ── Calls ──────────────────────────────────────────────────────
@@ -1040,7 +1043,7 @@ export const en: Translations = {
     testAgentError: 'Error creating test assistant',
     testConnectionError: 'Connection error',
     numberTitle: 'Choose a Phone Number',
-    numberSubtitle: 'Search for available Greek phone numbers for your assistant.',
+    numberSubtitle: 'Select an available number for your assistant.',
     numberSearch: 'Area (e.g. Athens, Thessaloniki)',
     numberSearchBtn: 'Search',
     numberSearching: 'Searching for numbers...',
@@ -1049,6 +1052,7 @@ export const en: Translations = {
     numberPerMonth: '/month',
     numberSkipNote: 'You can skip this step and buy a number later.',
     numberSearchError: 'Number search error',
+    numberActive: 'Active',
     reviewTitle: 'Setup Summary',
     reviewSubtitle: 'Review your details before we begin.',
     reviewBusiness: 'Business',
