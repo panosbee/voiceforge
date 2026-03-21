@@ -392,6 +392,18 @@ export const en: Translations = {
     activeLabel: 'Active',
     assignAndConnect: 'Assign & Connect',
     assignNote: 'The number will be automatically connected (SIP trunk) with the AI assistant on ElevenLabs.',
+    forwardingGuideTitle: 'How to forward calls to this number',
+    forwardingGuideIntro: 'To have your existing phone number forward calls to the AI assistant, activate call forwarding from your phone provider:',
+    forwardingStepDialCode: 'Dial this code from your phone:',
+    forwardingBusyNoAnswer: 'Forward when busy / no answer:',
+    forwardingUnconditional: 'Forward all calls:',
+    forwardingDeactivate: 'To deactivate:',
+    forwardingBusyCode: '**67*{number}#',
+    forwardingNoAnswerCode: '**61*{number}#',
+    forwardingUnconditionalCode: '**21*{number}#',
+    forwardingDeactivateAllCode: '##002#',
+    forwardingNote: 'These codes work for most Greek carriers (Cosmote, Vodafone, Wind). For landlines, contact your provider.',
+    forwardingAlternative: 'You can also set up forwarding through your provider\'s app or customer service.',
   },
 
   // ── Calls ──────────────────────────────────────────────────────

@@ -392,6 +392,18 @@ export const el: Translations = {
     activeLabel: 'Ενεργός',
     assignAndConnect: 'Αντιστοίχιση & Σύνδεση',
     assignNote: 'Ο αριθμός θα συνδεθεί αυτόματα (SIP trunk) με τον AI βοηθό στο ElevenLabs.',
+    forwardingGuideTitle: 'Πώς να προωθήσετε κλήσεις σε αυτόν τον αριθμό',
+    forwardingGuideIntro: 'Για να προωθούνται οι κλήσεις του υπάρχοντος αριθμού σας στον AI βοηθό, ενεργοποιήστε την προώθηση κλήσεων:',
+    forwardingStepDialCode: 'Πληκτρολογήστε τον κωδικό από το τηλέφωνό σας:',
+    forwardingBusyNoAnswer: 'Προώθηση όταν είστε κατειλημμένος / δεν απαντάτε:',
+    forwardingUnconditional: 'Προώθηση όλων των κλήσεων:',
+    forwardingDeactivate: 'Για απενεργοποίηση:',
+    forwardingBusyCode: '**67*{number}#',
+    forwardingNoAnswerCode: '**61*{number}#',
+    forwardingUnconditionalCode: '**21*{number}#',
+    forwardingDeactivateAllCode: '##002#',
+    forwardingNote: 'Οι κωδικοί λειτουργούν για τους περισσότερους Ελληνικούς παρόχους (Cosmote, Vodafone, Wind). Για σταθερά τηλέφωνα, επικοινωνήστε με τον πάροχό σας.',
+    forwardingAlternative: 'Μπορείτε επίσης να ρυθμίσετε την προώθηση μέσω της εφαρμογής του παρόχου ή του τμήματος εξυπηρέτησης.',
   },
 
   // ── Calls ──────────────────────────────────────────────────────

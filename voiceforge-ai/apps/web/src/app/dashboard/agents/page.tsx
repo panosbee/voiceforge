@@ -10,7 +10,7 @@ import { Button, Card, Badge, Spinner, EmptyState, PageHeader } from '@/componen
 import { api } from '@/lib/api-client';
 import { formatPhoneNumber, getIndustryLabels } from '@/lib/utils';
 import { useI18n } from '@/lib/i18n';
-import { Bot, Plus, Phone, Trash2, Pencil, Cpu, PhoneCall, PhoneForwarded, PhoneOff, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Bot, Plus, Phone, Trash2, Pencil, Cpu, PhoneCall, PhoneForwarded, PhoneOff, AlertTriangle, RefreshCw, Info, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import { GREEK_VOICES, AI_PROVIDER } from '@voiceforge/shared';
 import type { AgentSummary, ApiResponse } from '@voiceforge/shared';
@@ -28,6 +28,7 @@ export default function AgentsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [testingAgent, setTestingAgent] = useState<{ id: string; name: string } | null>(null);
   const [assigningNumber, setAssigningNumber] = useState<{ id: string; name: string } | null>(null);
+  const [forwardingGuideFor, setForwardingGuideFor] = useState<string | null>(null);
   const [isDeletingTests, setIsDeletingTests] = useState(false);
 
 
@@ -215,6 +216,49 @@ export default function AgentsPage() {
                         >
                           <PhoneOff className="w-3.5 h-3.5" />
                         </button>
+                        <button
+                          onClick={() => setForwardingGuideFor(forwardingGuideFor === agent.id ? null : agent.id)}
+                          title={t.assignNumber.forwardingGuideTitle}
+                          className={`ml-0.5 p-0.5 rounded transition-colors ${forwardingGuideFor === agent.id ? 'text-brand-600 bg-brand-50' : 'text-text-tertiary hover:text-brand-500 hover:bg-brand-50'}`}
+                        >
+                          <Info className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                    {/* Call forwarding guide — collapsible */}
+                    {agent.phoneNumber && forwardingGuideFor === agent.id && (
+                      <div className="mt-1 p-3 rounded-xl border border-brand-200 bg-brand-50/50 space-y-2 text-xs">
+                        <p className="font-semibold text-brand-700 flex items-center gap-1.5">
+                          <PhoneForwarded className="w-3.5 h-3.5" />
+                          {t.assignNumber.forwardingGuideTitle}
+                        </p>
+                        <p className="text-text-secondary">{t.assignNumber.forwardingGuideIntro}</p>
+                        {[
+                          { label: t.assignNumber.forwardingBusyNoAnswer, codes: [t.assignNumber.forwardingBusyCode, t.assignNumber.forwardingNoAnswerCode] },
+                          { label: t.assignNumber.forwardingUnconditional, codes: [t.assignNumber.forwardingUnconditionalCode] },
+                          { label: t.assignNumber.forwardingDeactivate, codes: [t.assignNumber.forwardingDeactivateAllCode] },
+                        ].map((section) => (
+                          <div key={section.label} className="space-y-0.5">
+                            <p className="font-medium text-text-primary">{section.label}</p>
+                            {section.codes.map((code) => {
+                              const formatted = code.replace('{number}', agent.phoneNumber!.replace('+', ''));
+                              return (
+                                <div key={code} className="flex items-center gap-1.5">
+                                  <code className="flex-1 font-mono bg-white px-2 py-1 rounded border border-border text-text-primary">
+                                    {formatted}
+                                  </code>
+                                  <button
+                                    onClick={() => { navigator.clipboard.writeText(formatted); toast.success('Copied!'); }}
+                                    className="p-1 rounded hover:bg-white text-text-tertiary"
+                                  >
+                                    <Copy className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ))}
+                        <p className="text-text-tertiary pt-1">{t.assignNumber.forwardingNote}</p>
                       </div>
                     )}
                     {agent.forwardPhoneNumber && (

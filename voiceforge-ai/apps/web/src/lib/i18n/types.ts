@@ -332,6 +332,18 @@ export interface Translations {
     activeLabel: string;
     assignAndConnect: string;
     assignNote: string;
+    forwardingGuideTitle: string;
+    forwardingGuideIntro: string;
+    forwardingStepDialCode: string;
+    forwardingBusyNoAnswer: string;
+    forwardingUnconditional: string;
+    forwardingDeactivate: string;
+    forwardingBusyCode: string;
+    forwardingNoAnswerCode: string;
+    forwardingUnconditionalCode: string;
+    forwardingDeactivateAllCode: string;
+    forwardingNote: string;
+    forwardingAlternative: string;
   };
 
   // ── Calls ──────────────────────────────────────────────────────

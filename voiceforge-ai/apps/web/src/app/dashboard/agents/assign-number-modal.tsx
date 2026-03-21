@@ -10,7 +10,7 @@ import { Button, Spinner } from '@/components/ui';
 import { api } from '@/lib/api-client';
 import { formatPhoneNumber } from '@/lib/utils';
 import { useI18n } from '@/lib/i18n';
-import { X, Phone, CheckCircle, AlertCircle } from 'lucide-react';
+import { X, Phone, CheckCircle, AlertCircle, PhoneForwarded, Info, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import type { ApiResponse } from '@voiceforge/shared';
 
@@ -92,52 +92,161 @@ export function AssignNumberModal({ agentId, agentName, onClose, onAssigned }: A
 
   const availableNumbers = numbers.filter((n) => !n.assigned);
 
+  // Helper to replace {number} in forwarding codes
+  const formatCode = (template: string) => {
+    if (!assignResult) return template;
+    const raw = assignResult.phoneNumber.replace('+', '');
+    return template.replace('{number}', raw);
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success('Copied!');
+  };
+
   // Success screen
   if (assignResult) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
-        <div className="bg-surface rounded-2xl shadow-modal w-full max-w-md overflow-hidden">
-          <div className="p-8 text-center">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-100 flex items-center justify-center">
-              <CheckCircle className="w-8 h-8 text-green-600" />
-            </div>
-            <h2 className="text-xl font-bold text-text-primary mb-2">
-              {t.assignNumber.connected}
-            </h2>
-            <p className="text-2xl font-mono font-semibold text-brand-600 mb-4">
-              {formatPhoneNumber(assignResult.phoneNumber)}
-            </p>
-            <div className="space-y-2 text-sm text-text-secondary mb-6">
-              <div className="flex items-center justify-center gap-2">
-                {assignResult.sipConfigured ? (
-                  <CheckCircle className="w-4 h-4 text-green-500" />
-                ) : (
-                  <AlertCircle className="w-4 h-4 text-yellow-500" />
-                )}
-                <span>SIP Trunk (Telnyx → ElevenLabs)</span>
+        <div className="bg-surface rounded-2xl shadow-modal w-full max-w-md overflow-hidden max-h-[90vh] flex flex-col">
+          <div className="flex-1 overflow-y-auto p-8">
+            {/* Success header */}
+            <div className="text-center">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-100 flex items-center justify-center">
+                <CheckCircle className="w-8 h-8 text-green-600" />
               </div>
-              <div className="flex items-center justify-center gap-2">
-                {assignResult.elevenlabsConfigured ? (
-                  <CheckCircle className="w-4 h-4 text-green-500" />
-                ) : (
-                  <AlertCircle className="w-4 h-4 text-yellow-500" />
-                )}
-                <span>ElevenLabs Agent Assignment</span>
-              </div>
-            </div>
-            {assignResult.elevenlabsConfigured && assignResult.sipConfigured && (
-              <p className="text-sm text-green-600 font-medium mb-4">
-                {t.assignNumber.callNowNote}
+              <h2 className="text-xl font-bold text-text-primary mb-2">
+                {t.assignNumber.connected}
+              </h2>
+              <p className="text-2xl font-mono font-semibold text-brand-600 mb-4">
+                {formatPhoneNumber(assignResult.phoneNumber)}
               </p>
-            )}
-            <Button
-              onClick={() => {
-                onAssigned();
-                onClose();
-              }}
-            >
-              {t.assignNumber.done}
-            </Button>
+              <div className="space-y-2 text-sm text-text-secondary mb-4">
+                <div className="flex items-center justify-center gap-2">
+                  {assignResult.sipConfigured ? (
+                    <CheckCircle className="w-4 h-4 text-green-500" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-yellow-500" />
+                  )}
+                  <span>SIP Trunk (Telnyx → ElevenLabs)</span>
+                </div>
+                <div className="flex items-center justify-center gap-2">
+                  {assignResult.elevenlabsConfigured ? (
+                    <CheckCircle className="w-4 h-4 text-green-500" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-yellow-500" />
+                  )}
+                  <span>ElevenLabs Agent Assignment</span>
+                </div>
+              </div>
+              {assignResult.elevenlabsConfigured && assignResult.sipConfigured && (
+                <p className="text-sm text-green-600 font-medium mb-4">
+                  {t.assignNumber.callNowNote}
+                </p>
+              )}
+            </div>
+
+            {/* Call Forwarding Guide */}
+            <div className="mt-4 border border-border rounded-xl overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-3 bg-brand-50 border-b border-border">
+                <PhoneForwarded className="w-4 h-4 text-brand-600" />
+                <span className="text-sm font-semibold text-brand-700">
+                  {t.assignNumber.forwardingGuideTitle}
+                </span>
+              </div>
+              <div className="px-4 py-3 space-y-3">
+                <p className="text-xs text-text-secondary">
+                  {t.assignNumber.forwardingGuideIntro}
+                </p>
+
+                {/* Busy / No Answer */}
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-text-primary">
+                    {t.assignNumber.forwardingBusyNoAnswer}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-xs font-mono bg-surface-secondary px-3 py-1.5 rounded-lg text-text-primary">
+                      {formatCode(t.assignNumber.forwardingBusyCode)}
+                    </code>
+                    <button
+                      onClick={() => copyToClipboard(formatCode(t.assignNumber.forwardingBusyCode))}
+                      className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-xs font-mono bg-surface-secondary px-3 py-1.5 rounded-lg text-text-primary">
+                      {formatCode(t.assignNumber.forwardingNoAnswerCode)}
+                    </code>
+                    <button
+                      onClick={() => copyToClipboard(formatCode(t.assignNumber.forwardingNoAnswerCode))}
+                      className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Unconditional (all calls) */}
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-text-primary">
+                    {t.assignNumber.forwardingUnconditional}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-xs font-mono bg-surface-secondary px-3 py-1.5 rounded-lg text-text-primary">
+                      {formatCode(t.assignNumber.forwardingUnconditionalCode)}
+                    </code>
+                    <button
+                      onClick={() => copyToClipboard(formatCode(t.assignNumber.forwardingUnconditionalCode))}
+                      className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Deactivate */}
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-text-primary">
+                    {t.assignNumber.forwardingDeactivate}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-xs font-mono bg-surface-secondary px-3 py-1.5 rounded-lg text-text-primary">
+                      {t.assignNumber.forwardingDeactivateAllCode}
+                    </code>
+                    <button
+                      onClick={() => copyToClipboard(t.assignNumber.forwardingDeactivateAllCode)}
+                      className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-1.5 pt-1">
+                  <Info className="w-3.5 h-3.5 text-text-tertiary shrink-0 mt-0.5" />
+                  <p className="text-[11px] text-text-tertiary leading-relaxed">
+                    {t.assignNumber.forwardingNote}
+                  </p>
+                </div>
+                <p className="text-[11px] text-text-tertiary">
+                  {t.assignNumber.forwardingAlternative}
+                </p>
+              </div>
+            </div>
+
+            {/* Done button */}
+            <div className="mt-6 text-center">
+              <Button
+                onClick={() => {
+                  onAssigned();
+                  onClose();
+                }}
+              >
+                {t.assignNumber.done}
+              </Button>
+            </div>
           </div>
         </div>
       </div>

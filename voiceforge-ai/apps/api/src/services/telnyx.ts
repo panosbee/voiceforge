@@ -466,7 +466,7 @@ export async function createSipConnection(
     },
     body: JSON.stringify({
       connection_name: connectionName,
-      transport_protocol: 'UDP',
+      transport_protocol: 'TCP',
       active: true,
     }),
   });

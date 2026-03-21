@@ -869,12 +869,12 @@ export async function importPhoneNumber(params: {
     phoneNumber: params.phoneNumber,
     label: params.label,
     inboundTrunkConfig: {
-      // Telnyx SIP IPs — allow inbound SIP INVITE from Telnyx infrastructure
+      // Telnyx SIP signaling IPs — from https://sip.telnyx.com/
       allowedAddresses: [
-        '52.2.22.216/30',     // Telnyx US East
-        '52.42.159.76/30',    // Telnyx US West
-        '169.55.46.12/30',    // Telnyx EU
-        '198.23.143.0/24',    // Telnyx Additional
+        '192.76.120.0/24',    // Telnyx US primary signaling (192.76.120.10) + Canada (.31)
+        '64.16.250.0/24',     // Telnyx US secondary signaling (64.16.250.10) + Canada (.13)
+        '185.246.41.0/24',    // Telnyx EU signaling (185.246.41.140, .141) + media
+        '103.115.244.0/24',   // Telnyx AU signaling (103.115.244.145, .146) + media
       ],
     },
     outboundTrunkConfig: params.terminationUri ? {
