@@ -252,6 +252,16 @@ async function recordMissedConversation(
     }
   }
 
+  // ── Extract real caller phone from SIP/phone metadata ─────
+  // For phone calls via SIP trunk, the actual caller number is in metadata.phoneCall.externalNumber
+  // AI extraction may fail if caller doesn't verbally mention their number
+  const phoneCallMeta = metadata?.phoneCall as Record<string, any> | undefined;
+  const isPhoneCall = !!phoneCallMeta;
+  const sipCallerPhone = phoneCallMeta?.externalNumber ?? null;
+  const sipAgentNumber = phoneCallMeta?.agentNumber
+    ? `+${String(phoneCallMeta.agentNumber).replace(/^\+/, '')}`
+    : null;
+
   // Evaluation criteria
   const evalResults = (analysis?.evaluationCriteriaResults ?? analysis?.evaluation_criteria_results ?? {}) as Record<string, unknown>;
   const appointmentEval = evalResults?.appointment_booked as Record<string, unknown> | undefined;
@@ -262,7 +272,8 @@ async function recordMissedConversation(
   const appointmentDate = extractedData.appointment_date || null;
   const appointmentTime = extractedData.appointment_time || '09:00';
   const appointmentCallerName = extractedData.caller_name || null;
-  const appointmentCallerPhone = extractedData.caller_phone || 'unknown';
+  // Use SIP metadata phone first, then AI extraction, then fallback
+  const appointmentCallerPhone = extractedData.caller_phone || sipCallerPhone || 'unknown';
   const appointmentReason = extractedData.appointment_reason || null;
   const callerIntent = extractedData.caller_intent || (appointmentBooked ? 'appointment_booking' : 'inquiry');
 
@@ -275,13 +286,20 @@ async function recordMissedConversation(
   const startedAt = startTimeUnix ? new Date(Number(startTimeUnix) * 1000) : new Date(Date.now() - durationSeconds * 1000);
   const endedAt = new Date(startedAt.getTime() + durationSeconds * 1000);
 
+  // Determine caller and agent numbers
+  // Priority: AI-extracted > SIP metadata > agent config > fallback
+  const resolvedCallerNumber = appointmentCallerPhone !== 'unknown'
+    ? appointmentCallerPhone
+    : sipCallerPhone || 'unknown';
+  const resolvedAgentNumber = sipAgentNumber || agent.phoneNumber || 'widget';
+
   // Insert call record
   const [callRecord] = await db.insert(calls).values({
     customerId: agent.customerId,
     agentId: agent.id,
     telnyxConversationId: conversationId,
-    callerNumber: appointmentCallerPhone !== 'unknown' ? appointmentCallerPhone : 'synced',
-    agentNumber: agent.phoneNumber || 'widget',
+    callerNumber: resolvedCallerNumber,
+    agentNumber: resolvedAgentNumber,
     direction: 'inbound',
     status: 'completed',
     startedAt,
@@ -293,7 +311,7 @@ async function recordMissedConversation(
     intentCategory: callerIntent,
     appointmentBooked,
     insightsRaw: { analysis, metadata: metadata as Record<string, unknown>, extractedData, source: 'conversation-sync' },
-    metadata: { syncedByWorker: true, isWidgetTest: true },
+    metadata: { syncedByWorker: true, isPhoneCall, ...(isPhoneCall ? { sipCallerPhone, sipAgentNumber } : {}) },
   }).returning();
 
   if (!callRecord) return null;
@@ -355,7 +373,7 @@ async function recordMissedConversation(
             roleLabel: r.roleLabel,
             roleDescription: r.roleDescription,
           })),
-          callerPhone: callRecord.callerNumber !== 'synced' ? callRecord.callerNumber : undefined,
+          callerPhone: callRecord.callerNumber !== 'unknown' ? callRecord.callerNumber : undefined,
           language: agent.language,
         });
 
@@ -487,7 +505,7 @@ async function recordMissedConversation(
 
   // ── Episodic Memory — Update Caller Memory ──────────────────
   const callerNumber = callRecord.callerNumber;
-  if (callerNumber && callerNumber !== 'synced' && callerNumber !== 'unknown') {
+  if (callerNumber && callerNumber !== 'unknown') {
     try {
       const memorySummary = summary || transcriptText?.slice(0, 500) || 'Κλήση χωρίς περίληψη.';
 

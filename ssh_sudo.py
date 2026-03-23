@@ -3,13 +3,13 @@ import sys
 
 ssh = paramiko.SSHClient()
 ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-ssh.connect('104.248.20.89', username='voiceforge', password='voiceforge_pw_salimov')
+ssh.connect('104.248.20.89', username='voiceforge', password='v0Icef0rg3R0t@!t3d')
 
 cmd = sys.argv[1] if len(sys.argv) > 1 else 'echo no command'
 
 # If command starts with 'sudo', pipe password
 if 'sudo' in cmd:
-    full_cmd = f'echo voiceforge_pw_salimov | sudo -S {cmd.replace("sudo ", "", 1)} 2>&1'
+    full_cmd = f'echo v0Icef0rg3R0t@!t3d | sudo -S {cmd.replace("sudo ", "", 1)} 2>&1'
 else:
     full_cmd = cmd
 

@@ -3,7 +3,7 @@ import sys
 
 ssh = paramiko.SSHClient()
 ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-ssh.connect('104.248.20.89', username='voiceforge', password='voiceforge_pw_salimov')
+ssh.connect('104.248.20.89', username='voiceforge', password='v0Icef0rg3R0t@!t3d')
 
 sql = sys.argv[1] if len(sys.argv) > 1 else "SELECT 1"
 cmd = f'docker exec -i voiceforge-postgres psql -U voiceforge -d voiceforge -t'
