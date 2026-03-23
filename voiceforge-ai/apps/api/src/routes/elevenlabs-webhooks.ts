@@ -878,6 +878,13 @@ elevenlabsWebhookRoutes.post('/server-tool', async (c) => {
               const { generateIcsInvite } = await import('../services/ics-generator.js');
               const { sendAppointmentInviteEmail } = await import('../services/email.js');
 
+              // Use agent task email if configured, fall back to customer email
+              const taskEmails = await db.query.agentTaskEmails.findMany({
+                where: eq(agentTaskEmails.agentId, agentRecord.id),
+                orderBy: [agentTaskEmails.sortOrder],
+              });
+              const inviteRecipient = taskEmails.length > 0 ? taskEmails[0]!.email : customerRecord.email;
+
               const isEn = customerRecord.locale?.startsWith('en');
               const clientLabel = isEn ? 'Client' : 'Πελάτης';
               const aptLabel = isEn ? 'Appointment' : 'Ραντεβού';
@@ -895,9 +902,9 @@ elevenlabsWebhookRoutes.post('/server-tool', async (c) => {
                 attendeeName: callerName ?? undefined,
               });
 
-              // Send in background — don't block the response
+              // Send to agent task email (or customer email as fallback)
               sendAppointmentInviteEmail({
-                to: customerRecord.email,
+                to: inviteRecipient,
                 businessName: customerRecord.businessName ?? 'VoiceForge AI',
                 callerName: callerName ?? (customerRecord.locale?.startsWith('en') ? 'Client' : 'Πελάτης'),
                 date,
@@ -907,6 +914,8 @@ elevenlabsWebhookRoutes.post('/server-tool', async (c) => {
                 icsContent,
                 locale: customerRecord.locale,
               }).catch((err) => log.error({ err }, 'Failed to send appointment invite email'));
+
+              log.info({ to: inviteRecipient, agentId: agentRecord.id }, 'Appointment invite email queued');
             }
           } catch (emailErr) {
             log.error({ emailErr }, 'Error preparing appointment invite email');

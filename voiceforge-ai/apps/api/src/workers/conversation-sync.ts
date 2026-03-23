@@ -13,7 +13,7 @@
 // Runs every 2 minutes. Each run checks ALL active agents.
 // ═══════════════════════════════════════════════════════════════════
 
-import { eq, and, gte, lte, desc } from 'drizzle-orm';
+import { eq, and, gte, lte, desc, inArray } from 'drizzle-orm';
 import { db } from '../db/connection.js';
 import { agents, calls, webhookEvents, appointments, callerMemories, agentTaskEmails, tasks } from '../db/schema/index.js';
 import { createLogger } from '../config/logger.js';
@@ -106,27 +106,48 @@ async function syncAgentConversations(agent: {
   let recorded = 0;
   let skipped = 0;
 
+  // Batch dedup: collect all conversation IDs and check in one query
+  const allConvIds: string[] = [];
+  const convMap = new Map<string, typeof conversations[0]>();
   for (const conv of conversations) {
     const conversationId = ((conv as Record<string, unknown>).conversationId ?? (conv as Record<string, unknown>).conversation_id) as string | undefined;
-    if (!conversationId) continue;
+    if (conversationId) {
+      allConvIds.push(conversationId);
+      convMap.set(conversationId, conv);
+    }
+  }
 
-    // Check dedup — already recorded?
-    const existing = await db.query.webhookEvents.findFirst({
-      where: eq(webhookEvents.eventId, conversationId),
-    });
+  if (allConvIds.length === 0) return { recorded: 0, skipped: 0 };
 
-    if (existing) {
+  // Single batch query: check which conversation IDs already exist in webhook_events
+  const existingEvents = await db
+    .select({ eventId: webhookEvents.eventId })
+    .from(webhookEvents)
+    .where(inArray(webhookEvents.eventId, allConvIds));
+  const existingEventIds = new Set(existingEvents.map((e) => e.eventId));
+
+  // Also batch check calls table for existing conversation IDs
+  const unrecordedIds = allConvIds.filter((id) => !existingEventIds.has(id));
+  let existingCallIds = new Set<string>();
+  if (unrecordedIds.length > 0) {
+    const existingCalls = await db
+      .select({ convId: calls.telnyxConversationId })
+      .from(calls)
+      .where(inArray(calls.telnyxConversationId, unrecordedIds));
+    existingCallIds = new Set(existingCalls.map((c) => c.convId).filter(Boolean) as string[]);
+  }
+
+  for (const conversationId of allConvIds) {
+    const conv = convMap.get(conversationId)!;
+
+    // Skip if already in webhook_events
+    if (existingEventIds.has(conversationId)) {
       skipped++;
       continue;
     }
 
-    // Also check if there's already a call with this conversation ID
-    const existingCall = await db.query.calls.findFirst({
-      where: eq(calls.telnyxConversationId, conversationId),
-    });
-
-    if (existingCall) {
-      // Record dedup entry to avoid checking again
+    // Skip if already has a call record — mark dedup entry
+    if (existingCallIds.has(conversationId)) {
       await db.insert(webhookEvents).values({
         eventId: conversationId,
         eventType: 'conversation_sync.already_exists',
@@ -210,12 +231,26 @@ async function recordMissedConversation(
   }
 
   if (!transcriptText) {
-    // Empty conversation — mark as processed so we don't retry
+    // Check conversation status/age before marking as empty
+    // If the conversation is still in progress or very recent, skip it — don't mark as processed.
+    // The record-conversation endpoint or next sync cycle will handle it.
+    const convStatus = (full.status ?? (full as Record<string, unknown>).conversation_status) as string | undefined;
+    const startTimeSecs = (metadata?.start_time_unix_secs ?? metadata?.startTimeUnixSecs) as number | undefined;
+    const ageMs = startTimeSecs ? Date.now() - startTimeSecs * 1000 : 0;
+    const isRecentConversation = ageMs > 0 && ageMs < 5 * 60 * 1000; // Less than 5 minutes old
+    const isStillActive = convStatus && !['done', 'error', 'timeout', 'completed'].includes(convStatus);
+
+    if (isRecentConversation || isStillActive) {
+      log.debug({ conversationId, convStatus, ageMs: Math.round(ageMs / 1000) }, 'Skipping in-progress/recent conversation — no transcript yet');
+      return null;
+    }
+
+    // Conversation is old and finished but has no transcript — mark as processed
     await db.insert(webhookEvents).values({
       eventId: conversationId,
       eventType: 'conversation_sync.empty',
       source: 'conversation-sync',
-      payload: { conversationId, reason: 'no_transcript' },
+      payload: { conversationId, reason: 'no_transcript', convStatus, ageMinutes: Math.round(ageMs / 60000) },
     });
     return null;
   }
@@ -502,6 +537,13 @@ async function recordMissedConversation(
           // Send .ics calendar invite email
           if (isEmailConfigured() && agent.customer.email) {
             try {
+              // Use agent task email if configured, fall back to customer email
+              const taskEmails = await db.query.agentTaskEmails.findMany({
+                where: eq(agentTaskEmails.agentId, agent.id),
+                orderBy: [agentTaskEmails.sortOrder],
+              });
+              const inviteRecipient = taskEmails.length > 0 ? taskEmails[0]!.email : agent.customer.email;
+
               const customerRecord = agent.customer as typeof agent.customer & { businessName?: string };
               const businessName = customerRecord.businessName ?? agent.customer.ownerName ?? 'VoiceForge';
               const isEn = agent.customer.locale?.startsWith('en');
@@ -522,7 +564,7 @@ async function recordMissedConversation(
               });
 
               sendAppointmentInviteEmail({
-                to: agent.customer.email,
+                to: inviteRecipient,
                 businessName,
                 callerName: appointmentCallerName ?? clientLabel,
                 date: appointmentDate,
@@ -532,6 +574,8 @@ async function recordMissedConversation(
                 icsContent,
                 locale: agent.customer.locale,
               }).catch((err) => log.error({ err, callId: callRecord.id }, 'Failed to send appointment invite email (sync worker)'));
+
+              log.info({ to: inviteRecipient, agentId: agent.id }, 'Appointment invite email queued (sync worker)');
             } catch (emailErr) {
               log.error({ emailErr, callId: callRecord.id }, 'Error preparing appointment invite email (sync worker)');
             }

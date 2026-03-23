@@ -534,16 +534,24 @@ callRoutes.post('/record-conversation', zValidator('json', recordConversationSch
         const conversations = await elevenlabsService.getConversations(elevenlabsAgentId);
 
         if (conversations && conversations.length > 0) {
-          for (const conv of conversations) {
-            const cid = ((conv as Record<string, unknown>).conversationId ?? (conv as Record<string, unknown>).conversation_id) as string | undefined;
-            if (!cid) continue;
+          // Batch dedup: collect all conversation IDs and check in one query
+          const convIds = conversations
+            .map((conv) => ((conv as Record<string, unknown>).conversationId ?? (conv as Record<string, unknown>).conversation_id) as string | undefined)
+            .filter((cid): cid is string => !!cid);
 
-            const existing = await db.query.webhookEvents.findFirst({
-              where: eq(webhookEvents.eventId, cid),
-            });
-            if (!existing) {
-              conversationId = cid;
-              break;
+          if (convIds.length > 0) {
+            const existingEvents = await db
+              .select({ eventId: webhookEvents.eventId })
+              .from(webhookEvents)
+              .where(inArray(webhookEvents.eventId, convIds));
+            const existingIds = new Set(existingEvents.map((e) => e.eventId));
+
+            // Find the first conversation that hasn't been recorded yet
+            for (const cid of convIds) {
+              if (!existingIds.has(cid)) {
+                conversationId = cid;
+                break;
+              }
             }
           }
         }
@@ -799,6 +807,13 @@ callRoutes.post('/record-conversation', zValidator('json', recordConversationSch
           // Send .ics calendar invite email
           if (isEmailConfigured() && customer.email) {
             try {
+              // Use agent task email if configured, fall back to customer email
+              const taskEmails = await db.query.agentTaskEmails.findMany({
+                where: eq(agentTaskEmails.agentId, agent.id),
+                orderBy: [agentTaskEmails.sortOrder],
+              });
+              const inviteRecipient = taskEmails.length > 0 ? taskEmails[0]!.email : customer.email;
+
               const isEn = customer.locale?.startsWith('en');
               const aptLabel = isEn ? 'Appointment' : 'Ραντεβού';
               const clientLabel = isEn ? 'Client' : 'Πελάτης';
@@ -817,7 +832,7 @@ callRoutes.post('/record-conversation', zValidator('json', recordConversationSch
               });
 
               sendAppointmentInviteEmail({
-                to: customer.email,
+                to: inviteRecipient,
                 businessName: customer.businessName ?? 'VoiceForge AI',
                 callerName: appointmentCallerName ?? clientLabel,
                 date: appointmentDate,
@@ -827,6 +842,8 @@ callRoutes.post('/record-conversation', zValidator('json', recordConversationSch
                 icsContent,
                 locale: customer.locale,
               }).catch((err) => log.error({ err, callId: callRecord.id }, 'Failed to send appointment invite email (widget)'));
+
+              log.info({ to: inviteRecipient, agentId: agent.id }, 'Appointment invite email queued (widget)');
             } catch (emailErr) {
               log.error({ emailErr, callId: callRecord.id }, 'Error preparing appointment invite email (widget)');
             }
