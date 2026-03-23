@@ -14,7 +14,8 @@ import { createLogger } from '../config/logger.js';
 import { getMonthRangeInTimezone, parseDateTimeInTimezone } from '../services/timezone.js';
 import * as elevenlabsService from '../services/elevenlabs.js';
 import { extractAppointmentFromTranscript } from '../services/transcript-parser.js';
-import { notifyCallCompleted, sendTaskNotificationEmail, isEmailConfigured } from '../services/email.js';
+import { notifyCallCompleted, sendTaskNotificationEmail, sendAppointmentInviteEmail, isEmailConfigured } from '../services/email.js';
+import { generateIcsInvite } from '../services/ics-generator.js';
 import { extractTasksFromTranscript } from '../services/task-extraction.js';
 import { generateConfirmToken } from './tasks.js';
 import { getTelephonyProvider } from '../services/telephony/index.js';
@@ -753,12 +754,10 @@ callRoutes.post('/record-conversation', zValidator('json', recordConversationSch
     }
 
     // Create appointment if AI detected one — with slot conflict resolution
-    if (appointmentBooked) {
+    if (appointmentBooked && appointmentDate) {
       try {
         const customerTz = customer.timezone || 'Europe/Athens';
-        let scheduledAt = appointmentDate
-          ? parseDateTimeInTimezone(appointmentDate, appointmentTime, customerTz)
-          : new Date();
+        let scheduledAt = parseDateTimeInTimezone(appointmentDate, appointmentTime, customerTz);
 
         // Check for slot conflicts: find existing appointments within ±30 minutes
         const slotStart = new Date(scheduledAt.getTime() - 30 * 60 * 1000);
@@ -783,7 +782,7 @@ callRoutes.post('/record-conversation', zValidator('json', recordConversationSch
           );
         }
 
-        await db.insert(appointments).values({
+        const [apt] = await db.insert(appointments).values({
           customerId: customer.id,
           agentId: agent.id,
           callId: callRecord.id,
@@ -792,11 +791,54 @@ callRoutes.post('/record-conversation', zValidator('json', recordConversationSch
           scheduledAt,
           notes: appointmentReason ?? summary ?? null,
           status: 'pending',
-        });
-        log.info({ callId: callRecord.id, scheduledAt: scheduledAt.toISOString() }, 'Appointment created from widget conversation');
+        }).onConflictDoNothing({ target: [appointments.customerId, appointments.scheduledAt] }).returning();
+
+        if (apt) {
+          log.info({ callId: callRecord.id, scheduledAt: scheduledAt.toISOString() }, 'Appointment created from widget conversation');
+
+          // Send .ics calendar invite email
+          if (isEmailConfigured() && customer.email) {
+            try {
+              const isEn = customer.locale?.startsWith('en');
+              const aptLabel = isEn ? 'Appointment' : 'Ραντεβού';
+              const clientLabel = isEn ? 'Client' : 'Πελάτης';
+              const svcLabel = isEn ? 'Service' : 'Υπηρεσία';
+              const phoneLabel = isEn ? 'Phone' : 'Τηλέφωνο';
+
+              const endAt = new Date(scheduledAt.getTime() + 30 * 60 * 1000);
+              const icsContent = generateIcsInvite({
+                summary: `${aptLabel}: ${appointmentCallerName ?? clientLabel} — ${customer.businessName ?? 'VoiceForge'}`,
+                description: `${appointmentReason ? `${svcLabel}: ${appointmentReason}\n` : ''}${phoneLabel}: ${appointmentCallerPhone}`.trim(),
+                startAt: scheduledAt,
+                endAt,
+                organizerName: customer.businessName ?? 'VoiceForge AI',
+                organizerEmail: customer.email,
+                attendeeName: appointmentCallerName ?? undefined,
+              });
+
+              sendAppointmentInviteEmail({
+                to: customer.email,
+                businessName: customer.businessName ?? 'VoiceForge AI',
+                callerName: appointmentCallerName ?? clientLabel,
+                date: appointmentDate,
+                time: appointmentTime,
+                serviceType: appointmentReason ?? undefined,
+                notes: summary ?? undefined,
+                icsContent,
+                locale: customer.locale,
+              }).catch((err) => log.error({ err, callId: callRecord.id }, 'Failed to send appointment invite email (widget)'));
+            } catch (emailErr) {
+              log.error({ emailErr, callId: callRecord.id }, 'Error preparing appointment invite email (widget)');
+            }
+          }
+        } else {
+          log.info({ callId: callRecord.id, scheduledAt: scheduledAt.toISOString() }, 'Appointment already exists at this slot (dedup — widget)');
+        }
       } catch (aptErr) {
         log.error({ error: aptErr, callId: callRecord.id }, 'Failed to create appointment from widget conversation');
       }
+    } else if (appointmentBooked && !appointmentDate) {
+      log.warn({ callId: callRecord.id }, 'Appointment detected but no date extracted — skipping creation');
     }
 
     // ── SMS Notification ────────────────────────────────────────

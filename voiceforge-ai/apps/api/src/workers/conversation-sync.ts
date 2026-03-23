@@ -20,7 +20,8 @@ import { createLogger } from '../config/logger.js';
 import * as elevenlabsService from '../services/elevenlabs.js';
 import { parseDateTimeInTimezone } from '../services/timezone.js';
 import { extractAppointmentFromTranscript } from '../services/transcript-parser.js';
-import { notifyCallCompleted, sendTaskNotificationEmail, isEmailConfigured } from '../services/email.js';
+import { notifyCallCompleted, sendTaskNotificationEmail, sendAppointmentInviteEmail, isEmailConfigured } from '../services/email.js';
+import { generateIcsInvite } from '../services/ics-generator.js';
 import { getTelephonyProvider } from '../services/telephony/index.js';
 import { extractTasksFromTranscript } from '../services/task-extraction.js';
 import { generateConfirmToken } from '../routes/tasks.js';
@@ -436,12 +437,10 @@ async function recordMissedConversation(
   }
 
   // ── Store Appointment if Booked — with dedup against server tool ──
-  if (appointmentBooked) {
+  if (appointmentBooked && appointmentDate) {
     try {
       const customerTz = agent.customer.timezone || 'Europe/Athens';
-      let scheduledAt = appointmentDate
-        ? parseDateTimeInTimezone(appointmentDate, appointmentTime, customerTz)
-        : new Date();
+      let scheduledAt = parseDateTimeInTimezone(appointmentDate, appointmentTime, customerTz);
 
       // Check if book_appointment server tool already created this appointment
       const slotStart = new Date(scheduledAt.getTime() - 30 * 60 * 1000);
@@ -486,7 +485,7 @@ async function recordMissedConversation(
           );
         }
 
-        await db.insert(appointments).values({
+        const [apt] = await db.insert(appointments).values({
           customerId: agent.customerId,
           agentId: agent.id,
           callId: callRecord.id,
@@ -495,12 +494,57 @@ async function recordMissedConversation(
           scheduledAt,
           notes: appointmentReason ?? summary ?? null,
           status: 'pending',
-        });
-        log.info({ callId: callRecord.id, scheduledAt: scheduledAt.toISOString() }, 'Appointment created from synced conversation');
+        }).onConflictDoNothing({ target: [appointments.customerId, appointments.scheduledAt] }).returning();
+
+        if (apt) {
+          log.info({ callId: callRecord.id, scheduledAt: scheduledAt.toISOString() }, 'Appointment created from synced conversation');
+
+          // Send .ics calendar invite email
+          if (isEmailConfigured() && agent.customer.email) {
+            try {
+              const customerRecord = agent.customer as typeof agent.customer & { businessName?: string };
+              const businessName = customerRecord.businessName ?? agent.customer.ownerName ?? 'VoiceForge';
+              const isEn = agent.customer.locale?.startsWith('en');
+              const aptLabel = isEn ? 'Appointment' : 'Ραντεβού';
+              const clientLabel = isEn ? 'Client' : 'Πελάτης';
+              const svcLabel = isEn ? 'Service' : 'Υπηρεσία';
+              const phoneLabel = isEn ? 'Phone' : 'Τηλέφωνο';
+
+              const endAt = new Date(scheduledAt.getTime() + 30 * 60 * 1000);
+              const icsContent = generateIcsInvite({
+                summary: `${aptLabel}: ${appointmentCallerName ?? clientLabel} — ${businessName}`,
+                description: `${appointmentReason ? `${svcLabel}: ${appointmentReason}\n` : ''}${phoneLabel}: ${appointmentCallerPhone}`.trim(),
+                startAt: scheduledAt,
+                endAt,
+                organizerName: businessName,
+                organizerEmail: agent.customer.email,
+                attendeeName: appointmentCallerName ?? undefined,
+              });
+
+              sendAppointmentInviteEmail({
+                to: agent.customer.email,
+                businessName,
+                callerName: appointmentCallerName ?? clientLabel,
+                date: appointmentDate,
+                time: appointmentTime,
+                serviceType: appointmentReason ?? undefined,
+                notes: summary ?? undefined,
+                icsContent,
+                locale: agent.customer.locale,
+              }).catch((err) => log.error({ err, callId: callRecord.id }, 'Failed to send appointment invite email (sync worker)'));
+            } catch (emailErr) {
+              log.error({ emailErr, callId: callRecord.id }, 'Error preparing appointment invite email (sync worker)');
+            }
+          }
+        } else {
+          log.info({ callId: callRecord.id, scheduledAt: scheduledAt.toISOString() }, 'Appointment already exists at this slot (dedup — sync worker)');
+        }
       }
     } catch (aptErr) {
       log.error({ error: aptErr, callId: callRecord.id }, 'Failed to create appointment from synced conversation');
     }
+  } else if (appointmentBooked && !appointmentDate) {
+    log.warn({ callId: callRecord.id }, 'Appointment detected but no date extracted — skipping creation (sync worker)');
   }
 
   // ── Episodic Memory — Update Caller Memory ──────────────────
