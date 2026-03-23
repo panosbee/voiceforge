@@ -257,6 +257,7 @@ export default function CalendarPage() {
     defaultView: 'month-grid',
     views: [createViewMonthGrid(), createViewWeek(), createViewDay()],
     selectedDate: TODAY_PLAIN_DATE,
+    timezone: customerTz,
     dayBoundaries: { start: '07:00', end: '22:00' },
     weekOptions: { gridHeight: 1200, nDays: 7, eventWidth: 100, eventOverlap: false },
     monthGridOptions: { nEventsPerDay: 10 },
