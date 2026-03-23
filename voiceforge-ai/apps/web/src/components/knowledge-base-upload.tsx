@@ -154,6 +154,7 @@ export function KnowledgeBaseUpload({ agentId, onDocumentsChange, compact = fals
         toast.error(`${t.knowledgeBase.uploadError}: ${file.name}`);
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agentId, onDocumentsChange]);
 
   // ── Drag & Drop ────────────────────────────────────────────────

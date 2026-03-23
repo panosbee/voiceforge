@@ -171,7 +171,7 @@ export async function activateLicenseKey(
       licenseExpiresAt: expiresAt,
       registrationStatus: 'active',
       isActive: true,
-      plan: record.plan as any, // Cast to plan enum
+      plan: record.plan as typeof customers.$inferInsert.plan,
       updatedAt: new Date(),
     })
     .where(eq(customers.id, customerId));

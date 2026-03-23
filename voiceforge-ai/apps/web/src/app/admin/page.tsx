@@ -241,12 +241,14 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
   }, [token]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     Promise.all([fetchStats(), fetchRegistrations(), fetchLicenseKeys(), fetchCustomers()])
       .finally(() => setLoading(false));
   }, [fetchStats, fetchRegistrations, fetchLicenseKeys, fetchCustomers]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchRegistrations(regFilter);
   }, [regFilter, fetchRegistrations]);
 

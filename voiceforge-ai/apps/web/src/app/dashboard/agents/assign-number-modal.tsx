@@ -44,6 +44,7 @@ export function AssignNumberModal({ agentId, agentName, onClose, onAssigned }: A
 
   useEffect(() => {
     loadOwnedNumbers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadOwnedNumbers = async () => {

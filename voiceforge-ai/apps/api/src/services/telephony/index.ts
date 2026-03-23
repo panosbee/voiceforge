@@ -45,5 +45,5 @@ export function getTelephonyProvider(): TelephonyProvider {
       break;
   }
 
-  return _provider;
+  return _provider!;
 }

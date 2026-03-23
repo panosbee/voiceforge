@@ -74,6 +74,7 @@ export function KBWizard({ agentId, language = 'el', onComplete, onApplyPrompt }
       }
     };
     loadQuestions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const currentQuestion = questions[currentStep];

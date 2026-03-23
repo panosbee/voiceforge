@@ -8,7 +8,7 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { eq, desc, and } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import { db } from '../db/connection.js';
 import {
   pendingRegistrations,
@@ -18,7 +18,7 @@ import {
 import { createLogger } from '../config/logger.js';
 import { env } from '../config/env.js';
 import { generateLicenseKey } from '../services/license.js';
-import { sendLicenseKeyEmail, sendRegistrationNotificationEmail } from '../services/email.js';
+import { sendLicenseKeyEmail } from '../services/email.js';
 import type { ApiResponse } from '@voiceforge/shared';
 
 const log = createLogger('admin');

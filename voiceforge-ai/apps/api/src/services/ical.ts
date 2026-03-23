@@ -22,15 +22,6 @@ export interface ParsedIcalEvent {
 
 // ── iCal URL Validation ──────────────────────────────────────────
 
-const ALLOWED_ICAL_HOSTS = [
-  'calendar.google.com',
-  'outlook.office365.com',
-  'outlook.live.com',
-  'p.]', // Apple iCloud calendar
-  'caldav.icloud.com',
-  'www.googleapis.com',
-];
-
 /**
  * Validate that an iCal URL is safe to fetch (prevent SSRF).
  * Only allows known calendar provider hosts and https protocol.

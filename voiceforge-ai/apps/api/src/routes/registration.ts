@@ -317,7 +317,7 @@ registrationRoutes.post('/activate', zValidator('json', activateSchema), async (
   const userId = generateDevUserId(registration.email);
 
   // Check if customer already exists
-  let existingCustomer = await db.query.customers.findFirst({
+  const existingCustomer = await db.query.customers.findFirst({
     where: eq(customers.userId, userId),
   });
 
@@ -334,8 +334,8 @@ registrationRoutes.post('/activate', zValidator('json', activateSchema), async (
         afm: registration.afm,
         doy: registration.doy,
         businessAddress: registration.businessAddress,
-        plan: registration.plan as any,
-        userRole: registration.userRole as any,
+        plan: registration.plan as typeof customers.$inferInsert.plan,
+        userRole: registration.userRole as typeof customers.$inferInsert.userRole,
         registrationStatus: 'active',
         isActive: true,
         updatedAt: new Date(),
@@ -361,8 +361,8 @@ registrationRoutes.post('/activate', zValidator('json', activateSchema), async (
         industry: 'general',
         timezone: 'Europe/Athens',
         locale: 'el-GR',
-        plan: registration.plan as any,
-        userRole: registration.userRole as any,
+        plan: registration.plan as typeof customers.$inferInsert.plan,
+        userRole: registration.userRole as typeof customers.$inferInsert.userRole,
         registrationStatus: 'active',
         isActive: true,
       })

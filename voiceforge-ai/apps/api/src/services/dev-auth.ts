@@ -4,11 +4,8 @@
 // ⚠️  THIS IS DEV-ONLY — never use in production.
 // ═══════════════════════════════════════════════════════════════════
 
-import { createHmac, randomUUID } from 'crypto';
+import { createHmac } from 'crypto';
 import { env } from '../config/env.js';
-import { createLogger } from '../config/logger.js';
-
-const log = createLogger('dev-auth');
 
 // We use ENCRYPTION_KEY as our JWT signing secret in dev mode
 const DEV_JWT_SECRET = env.ENCRYPTION_KEY;

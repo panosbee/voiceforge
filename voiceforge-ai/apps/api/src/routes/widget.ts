@@ -5,7 +5,7 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import { Hono } from 'hono';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { db } from '../db/connection.js';
 import { agents, calls, webhookEvents } from '../db/schema/index.js';
 import { createLogger } from '../config/logger.js';
@@ -97,7 +97,7 @@ widgetRoutes.post('/:agentId/record', async (c) => {
 
     // Find the most recent conversation that we haven't recorded yet
     for (const conv of conversations) {
-      const conversationId = ((conv as Record<string, any>).conversationId ?? (conv as Record<string, any>).conversation_id) as string | undefined;
+      const conversationId = ((conv as Record<string, unknown>).conversationId ?? (conv as Record<string, unknown>).conversation_id) as string | undefined;
       if (!conversationId) continue;
 
       // Check dedup

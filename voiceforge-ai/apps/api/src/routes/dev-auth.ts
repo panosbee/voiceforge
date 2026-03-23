@@ -49,7 +49,7 @@ const registerSchema = z.object({
 // ═══════════════════════════════════════════════════════════════════
 
 devAuthRoutes.post('/login', zValidator('json', loginSchema), async (c) => {
-  const { email, password } = c.req.valid('json');
+  const { email } = c.req.valid('json');
 
   const userId = generateDevUserId(email);
 
@@ -90,7 +90,7 @@ devAuthRoutes.post('/login', zValidator('json', loginSchema), async (c) => {
 // ═══════════════════════════════════════════════════════════════════
 
 devAuthRoutes.post('/register', zValidator('json', registerSchema), async (c) => {
-  const { email, password, businessName, ownerName, userRole } = c.req.valid('json');
+  const { email, businessName, ownerName, userRole } = c.req.valid('json');
 
   const userId = generateDevUserId(email);
 

@@ -44,6 +44,7 @@ export function TaskEmailsEditor({ agentId }: TaskEmailsEditorProps) {
       }
     };
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agentId]);
 
   const addEmail = () => {

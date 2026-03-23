@@ -20,6 +20,7 @@ export function CookieConsentBanner() {
 
   useEffect(() => {
     const stored = localStorage.getItem(CONSENT_KEY) as ConsentStatus | null;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setStatus(stored);
   }, []);
 

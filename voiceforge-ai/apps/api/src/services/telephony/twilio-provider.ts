@@ -6,6 +6,7 @@
 import type {
   TelephonyProvider,
   AvailableNumber,
+  OwnedNumber,
   PurchaseResult,
   SipConnectionResult,
   AssignNumberResult,
@@ -50,7 +51,7 @@ export class TwilioProvider implements TelephonyProvider {
 
     try {
       // Twilio availablePhoneNumbers for Greece (local)
-      let query = client.availablePhoneNumbers('GR').local;
+      const query = client.availablePhoneNumbers('GR').local;
       const params: Record<string, unknown> = {};
 
       if (options?.areaCode) params.areaCode = options.areaCode;
@@ -81,6 +82,24 @@ export class TwilioProvider implements TelephonyProvider {
     }
   }
 
+  async listOwnedNumbers(): Promise<OwnedNumber[]> {
+    if (!this.isConfigured()) {
+      log.warn('Twilio not configured — returning empty owned number list');
+      return [];
+    }
+
+    const client = getClient();
+    const numbers = await client.incomingPhoneNumbers.list();
+
+    return numbers.map((n) => ({
+      phoneNumber: n.phoneNumber,
+      status: n.status ?? 'in-use',
+      connectionId: null,
+      monthlyCost: '0',
+      currency: 'USD',
+    }));
+  }
+
   async purchasePhoneNumber(phoneNumber: string): Promise<PurchaseResult> {
     if (!this.isConfigured()) {
       throw new Error('Twilio is not configured');
@@ -105,7 +124,8 @@ export class TwilioProvider implements TelephonyProvider {
   /**
    * No-op: Twilio numbers use ElevenLabs native integration — no SIP wiring needed.
    */
-  async createSipConnection(_connectionName: string): Promise<SipConnectionResult> {
+  async createSipConnection(connectionName: string): Promise<SipConnectionResult> {
+    void connectionName;
     log.info('Twilio uses native ElevenLabs integration — SIP connection not needed');
     return { connectionId: 'twilio-native' };
   }
@@ -113,7 +133,9 @@ export class TwilioProvider implements TelephonyProvider {
   /**
    * No-op: ElevenLabs native Twilio integration handles routing.
    */
-  async assignNumberToSipConnection(_phoneNumber: string, _connectionId: string): Promise<AssignNumberResult> {
+  async assignNumberToSipConnection(phoneNumber: string, connectionId: string): Promise<AssignNumberResult> {
+    void phoneNumber;
+    void connectionId;
     log.info('Twilio uses native ElevenLabs integration — number assignment not needed');
     return { phoneNumberResourceId: 'twilio-native' };
   }

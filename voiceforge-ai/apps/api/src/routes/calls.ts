@@ -23,13 +23,6 @@ import type { ApiResponse } from '@voiceforge/shared';
 
 const log = createLogger('calls');
 
-/** Format seconds as M:SS */
-function formatDuration(secs: number): string {
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
-  return `${m}:${String(s).padStart(2, '0')}`;
-}
-
 export const callRoutes = new Hono<{ Variables: { user: AuthUser } }>();
 
 callRoutes.use('*', authMiddleware);
@@ -538,7 +531,7 @@ callRoutes.post('/record-conversation', zValidator('json', recordConversationSch
 
       if (conversations && conversations.length > 0) {
         for (const conv of conversations) {
-          const cid = ((conv as Record<string, any>).conversationId ?? (conv as Record<string, any>).conversation_id) as string | undefined;
+          const cid = ((conv as Record<string, unknown>).conversationId ?? (conv as Record<string, unknown>).conversation_id) as string | undefined;
           if (!cid) continue;
 
           const existing = await db.query.webhookEvents.findFirst({
@@ -568,21 +561,21 @@ callRoutes.post('/record-conversation', zValidator('json', recordConversationSch
     // ElevenLabs processes conversations asynchronously: the transcript
     // appears first, but the summary, data collection, and evaluation
     // criteria take several more seconds. We poll up to 5 times (total ~15s).
-    let full: Record<string, any> = {};
+    let full: Record<string, unknown> = {};
     let transcript: Array<{ role: string; message?: string; time_in_call_secs?: number; timeInCallSecs?: number }> = [];
-    let analysis: Record<string, any> | undefined;
-    let metadata: Record<string, any> | undefined;
+    let analysis: Record<string, unknown> | undefined;
+    let metadata: Record<string, unknown> | undefined;
 
     const MAX_ANALYSIS_ATTEMPTS = 8;
     for (let analysisAttempt = 0; analysisAttempt < MAX_ANALYSIS_ATTEMPTS; analysisAttempt++) {
-      full = await elevenlabsService.getConversation(conversationId) as Record<string, any>;
-      transcript = full.transcript ?? [];
-      analysis = full.analysis as Record<string, any> | undefined;
-      metadata = full.metadata as Record<string, any> | undefined;
+      full = await elevenlabsService.getConversation(conversationId);
+      transcript = (full.transcript ?? []) as Array<{ role: string; message?: string; time_in_call_secs?: number; timeInCallSecs?: number }>;
+      analysis = full.analysis as Record<string, unknown> | undefined;
+      metadata = full.metadata as Record<string, unknown> | undefined;
 
-      const hasTranscript = transcript.length > 0 && transcript.some((m: any) => m.message);
+      const hasTranscript = transcript.length > 0 && transcript.some((m) => m.message);
       const hasSummary = !!(analysis?.transcriptSummary ?? analysis?.transcript_summary);
-      const hasDataCollection = Object.keys(analysis?.dataCollectionResults ?? analysis?.data_collection_results ?? {}).length > 0;
+      const hasDataCollection = Object.keys((analysis?.dataCollectionResults ?? analysis?.data_collection_results ?? {}) as Record<string, unknown>).length > 0;
 
       if (hasTranscript && (hasSummary || hasDataCollection)) {
         log.info({ conversationId, attempt: analysisAttempt + 1, hasSummary, hasDataCollection }, '✅ Conversation analysis ready');
@@ -621,23 +614,23 @@ callRoutes.post('/record-conversation', zValidator('json', recordConversationSch
 
     // Calculate duration
     const durationSeconds = Math.ceil(
-      metadata?.call_duration_secs ??
+      (metadata?.call_duration_secs ??
       metadata?.callDurationSecs ??
       (transcript.length > 0
         ? (transcript[transcript.length - 1]?.time_in_call_secs ?? transcript[transcript.length - 1]?.timeInCallSecs ?? 0)
-        : 0)
+        : 0)) as number
     );
 
     // Extract analysis data — ElevenLabs AI provides structured extraction
-    const summary = analysis?.transcriptSummary ?? analysis?.transcript_summary ?? null;
+    const summary = (analysis?.transcriptSummary ?? analysis?.transcript_summary ?? null) as string | null;
     const callSuccessful = analysis?.callSuccessful ?? analysis?.call_successful;
 
     // Extract AI-collected data from dataCollectionResults
-    const dataCollectionResults = analysis?.dataCollectionResults ?? analysis?.data_collection_results ?? {};
+    const dataCollectionResults = (analysis?.dataCollectionResults ?? analysis?.data_collection_results ?? {}) as Record<string, unknown>;
     const extractedData: Record<string, string> = {};
     if (dataCollectionResults && typeof dataCollectionResults === 'object') {
       for (const [key, val] of Object.entries(dataCollectionResults)) {
-        const v = val as Record<string, any>;
+        const v = val as Record<string, unknown>;
         if (v?.value !== undefined && v.value !== null && String(v.value).trim() !== '') {
           extractedData[key] = String(v.value);
         }
@@ -665,8 +658,8 @@ callRoutes.post('/record-conversation', zValidator('json', recordConversationSch
     }
 
     // Check evaluation criteria results (AI-determined)
-    const evalResults = analysis?.evaluationCriteriaResults ?? analysis?.evaluation_criteria_results ?? {};
-    const appointmentEval = evalResults?.appointment_booked as Record<string, any> | undefined;
+    const evalResults = (analysis?.evaluationCriteriaResults ?? analysis?.evaluation_criteria_results ?? {}) as Record<string, unknown>;
+    const appointmentEval = evalResults?.appointment_booked as Record<string, unknown> | undefined;
     const appointmentBookedByAi = appointmentEval?.result === 'success';
 
     // Sentiment
@@ -689,7 +682,7 @@ callRoutes.post('/record-conversation', zValidator('json', recordConversationSch
 
     // Compute start time from conversation metadata
     const startTimeUnix = metadata?.start_time_unix_secs ?? metadata?.startTimeUnixSecs;
-    const startedAt = startTimeUnix ? new Date(startTimeUnix * 1000) : new Date(Date.now() - durationSeconds * 1000);
+    const startedAt = startTimeUnix ? new Date(Number(startTimeUnix) * 1000) : new Date(Date.now() - durationSeconds * 1000);
     const endedAt = new Date(startedAt.getTime() + durationSeconds * 1000);
 
     const intentCategory = callerIntent;

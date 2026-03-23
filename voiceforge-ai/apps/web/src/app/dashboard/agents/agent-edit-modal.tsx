@@ -178,6 +178,7 @@ export function AgentEditModal({ agentId, onClose, onSaved }: AgentEditModalProp
     };
 
     loadAgent();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agentId, onClose]);
 
   const handleSubmit = async (e: FormEvent) => {

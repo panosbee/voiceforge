@@ -12,7 +12,6 @@ import { db } from '../db/connection.js';
 import { customers, agents, knowledgeBaseDocuments } from '../db/schema/index.js';
 import { authMiddleware, type AuthUser } from '../middleware/auth.js';
 import { createLogger } from '../config/logger.js';
-import { env } from '../config/env.js';
 import * as elevenlabsService from '../services/elevenlabs.js';
 import { SUPPORTED_LANGUAGES } from '@voiceforge/shared';
 import type { ApiResponse } from '@voiceforge/shared';
@@ -162,7 +161,7 @@ kbWizardRoutes.post('/generate', zValidator('json', generateSchema), async (c) =
     const kbContent = buildKnowledgeBaseContent(body.answers, body.language, langName);
 
     // Generate the system prompt (instructions) based on answers
-    const generatedPrompt = buildSystemPrompt(body.answers, body.language, langName);
+    const generatedPrompt = buildSystemPrompt(body.answers, body.language);
 
     // Generate greeting based on business info
     const generatedGreeting = buildGreeting(body.answers, body.language);
@@ -290,7 +289,7 @@ function buildKnowledgeBaseContent(answers: Record<string, string>, langCode: st
 // Helper: Generate system prompt from wizard answers
 // ═══════════════════════════════════════════════════════════════════
 
-function buildSystemPrompt(answers: Record<string, string>, langCode: string, langName: string): string {
+function buildSystemPrompt(answers: Record<string, string>, langCode: string): string {
   const isGreek = langCode === 'el';
   const bName = answers.business_name || '';
   const bType = answers.business_type || '';

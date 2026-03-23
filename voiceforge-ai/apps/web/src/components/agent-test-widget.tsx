@@ -150,6 +150,7 @@ export function AgentTestWidget({ agentId, agentName, onClose }: AgentTestWidget
   // Auto-start conversation when mic permission is granted
   useEffect(() => {
     if (micPermission === 'granted' && status === 'idle') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       startConversation();
     }
   }, [micPermission, status, startConversation]);

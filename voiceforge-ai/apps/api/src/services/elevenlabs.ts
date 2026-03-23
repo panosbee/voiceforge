@@ -4,7 +4,7 @@
 // Telnyx handles ONLY phone numbers via SIP trunk
 // ═══════════════════════════════════════════════════════════════════
 
-import { ElevenLabsClient } from '@elevenlabs/elevenlabs-js';
+import { ElevenLabsClient, type ElevenLabs } from '@elevenlabs/elevenlabs-js';
 import { env } from '../config/env.js';
 import { createLogger } from '../config/logger.js';
 import * as fs from 'fs';
@@ -314,9 +314,9 @@ export async function createAgent(params: CreateAgentParams): Promise<CreateAgen
           },
         },
       },
-    } as any);
+    } as ElevenLabs.conversationalAi.BodyCreateAgentV1ConvaiAgentsCreatePost);
 
-    const agentId = (response as any).agentId ?? (response as any).agent_id;
+    const agentId = response.agentId;
     log.info({ agentId, name: params.name }, 'ElevenLabs agent created');
 
     return { agentId, name: params.name };
@@ -613,7 +613,8 @@ export async function uploadKBDocument(
     // Accept both file path (string) and Blob/File
     const fileData = typeof file === 'string' ? fs.createReadStream(file) : file;
 
-    const response = await (client.conversationalAi as Record<string, any>).knowledgeBase.documents.createFromFile({
+    const kbDocs = (client.conversationalAi as unknown as { knowledgeBase: { documents: { createFromFile: (opts: { file: unknown; name: string }) => Promise<unknown> } } }).knowledgeBase.documents;
+    const response = await kbDocs.createFromFile({
       file: fileData,
       name: fileName,
     });
@@ -642,7 +643,8 @@ export async function uploadKBText(
   log.info({ name, textLength: text.length }, 'Uploading KB text to ElevenLabs');
 
   try {
-    const response = await (client.conversationalAi as Record<string, any>).knowledgeBase.documents.createFromText({
+    const kbDocs = (client.conversationalAi as unknown as { knowledgeBase: { documents: { createFromText: (opts: { text: string; name: string }) => Promise<unknown> } } }).knowledgeBase.documents;
+    const response = await kbDocs.createFromText({
       text,
       name,
     });
@@ -671,7 +673,8 @@ export async function uploadKBUrl(
   log.info({ url, name }, 'Uploading KB from URL to ElevenLabs');
 
   try {
-    const response = await (client.conversationalAi as Record<string, any>).knowledgeBase.documents.createFromUrl({
+    const kbDocs = (client.conversationalAi as unknown as { knowledgeBase: { documents: { createFromUrl: (opts: { url: string; name: string }) => Promise<unknown> } } }).knowledgeBase.documents;
+    const response = await kbDocs.createFromUrl({
       url,
       name,
     });
@@ -697,7 +700,8 @@ export async function deleteKBDocument(documentId: string): Promise<void> {
   log.info({ documentId }, 'Deleting KB document');
 
   try {
-    await (client.conversationalAi as Record<string, any>).knowledgeBase.documents.delete(documentId);
+    const kbDocs = (client.conversationalAi as unknown as { knowledgeBase: { documents: { delete: (id: string) => Promise<unknown> } } }).knowledgeBase.documents;
+    await kbDocs.delete(documentId);
     log.info({ documentId }, 'KB document deleted');
   } catch (error) {
     log.error({ error, documentId }, 'Failed to delete KB document');
@@ -734,7 +738,6 @@ export async function attachKBToAgent(
  */
 export async function getConversations(
   agentId: string,
-  limit: number = 50,
 ): Promise<Array<Record<string, unknown>>> {
   const client = getClient();
 
