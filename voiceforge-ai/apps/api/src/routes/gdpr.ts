@@ -4,7 +4,7 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import { Hono } from 'hono';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { db } from '../db/connection.js';
 import { customers, agents, calls, appointments, auditLogs, callerMemories, knowledgeBaseDocuments } from '../db/schema/index.js';
 import { authMiddleware, type AuthUser } from '../middleware/auth.js';
@@ -244,7 +244,7 @@ gdprRoutes.delete('/delete-calls', async (c) => {
     }
 
     // Anonymize call content while preserving analytics metadata
-    const result = await db
+    await db
       .update(calls)
       .set({
         transcript: null,

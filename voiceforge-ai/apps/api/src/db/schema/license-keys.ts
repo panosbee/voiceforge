@@ -4,7 +4,7 @@
 // Each key is unique, tied to a plan + duration, and auto-expires.
 // ═══════════════════════════════════════════════════════════════════
 
-import { pgTable, uuid, text, integer, boolean, timestamp, pgEnum } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, integer, timestamp, pgEnum } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { customers } from './customers';
 

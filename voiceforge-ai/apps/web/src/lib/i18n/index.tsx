@@ -51,6 +51,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   // Hydrate from localStorage after mount
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLocaleState(getPersistedLocale());
   }, []);
 

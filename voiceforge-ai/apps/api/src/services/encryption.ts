@@ -11,7 +11,6 @@ const log = createLogger('encryption');
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16; // 128 bits
-const AUTH_TAG_LENGTH = 16; // 128 bits
 
 /** Derive the encryption key from the hex env var */
 function getKey(): Buffer {

@@ -23,7 +23,7 @@ export function extractAppointmentFromTranscript(transcript: string): FallbackEx
 
   // Date patterns: YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY
   const isoDateMatch = transcript.match(/(\d{4}-\d{2}-\d{2})/);
-  const euDateMatch = transcript.match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/);
+  const euDateMatch = transcript.match(/(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})/);
 
   if (isoDateMatch) {
     result.appointment_date = isoDateMatch[1];
@@ -108,9 +108,9 @@ export function extractAppointmentFromTranscript(transcript: string): FallbackEx
   }
 
   // Phone pattern
-  const phoneMatch = transcript.match(/(\+?\d[\d\s\-]{8,14}\d)/);
+  const phoneMatch = transcript.match(/(\+?\d[\d\s-]{8,14}\d)/);
   if (phoneMatch) {
-    result.caller_phone = phoneMatch[1]!.replace(/[\s\-]/g, '');
+    result.caller_phone = phoneMatch[1]!.replace(/[\s-]/g, '');
   }
 
   // Detect intent

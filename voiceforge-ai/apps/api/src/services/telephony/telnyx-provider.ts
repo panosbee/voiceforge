@@ -14,10 +14,6 @@ import type {
   SmsResult,
 } from './types.js';
 import * as telnyxService from '../telnyx.js';
-import { createLogger } from '../../config/logger.js';
-
-const log = createLogger('telephony:telnyx');
-
 export class TelnyxProvider implements TelephonyProvider {
   readonly name = 'telnyx';
 

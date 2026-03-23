@@ -150,6 +150,7 @@ export function SupportChatbot() {
     } finally {
       setIsLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoading, messages, locale]);
 
   const handleSend = (e: FormEvent) => {

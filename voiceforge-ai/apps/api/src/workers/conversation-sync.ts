@@ -15,7 +15,7 @@
 
 import { eq, and, gte, lte, desc } from 'drizzle-orm';
 import { db } from '../db/connection.js';
-import { agents, calls, customers, webhookEvents, appointments, callerMemories, agentTaskEmails, tasks } from '../db/schema/index.js';
+import { agents, calls, webhookEvents, appointments, callerMemories, agentTaskEmails, tasks } from '../db/schema/index.js';
 import { createLogger } from '../config/logger.js';
 import * as elevenlabsService from '../services/elevenlabs.js';
 import { parseDateTimeInTimezone } from '../services/timezone.js';
@@ -106,7 +106,7 @@ async function syncAgentConversations(agent: {
   let skipped = 0;
 
   for (const conv of conversations) {
-    const conversationId = ((conv as Record<string, any>).conversationId ?? (conv as Record<string, any>).conversation_id) as string | undefined;
+    const conversationId = ((conv as Record<string, unknown>).conversationId ?? (conv as Record<string, unknown>).conversation_id) as string | undefined;
     if (!conversationId) continue;
 
     // Check dedup — already recorded?
@@ -138,8 +138,8 @@ async function syncAgentConversations(agent: {
 
     // Filter by age — only sync conversations from the last 60 minutes
     // Older ones were either already handled or are too old to matter
-    const convStartTime = (conv as Record<string, any>).startTimeUnixSecs ??
-      (conv as Record<string, any>).start_time_unix_secs;
+    const convStartTime = (conv as Record<string, unknown>).startTimeUnixSecs ??
+      (conv as Record<string, unknown>).start_time_unix_secs;
     if (convStartTime) {
       const ageMs = Date.now() - (convStartTime as number) * 1000;
       if (ageMs > 60 * 60 * 1000) {
@@ -189,11 +189,11 @@ async function recordMissedConversation(
     customer: { id: string; timezone: string; email: string; ownerName: string; locale: string; phone: string | null };
   },
 ): Promise<{ callId: string } | null> {
-  const full = await elevenlabsService.getConversation(conversationId) as Record<string, any>;
+  const full = await elevenlabsService.getConversation(conversationId);
   const transcript: Array<{ role: string; message?: string; time_in_call_secs?: number; timeInCallSecs?: number }> =
-    full.transcript ?? [];
-  const analysis = full.analysis as Record<string, any> | undefined;
-  const metadata = full.metadata as Record<string, any> | undefined;
+    (full.transcript ?? []) as Array<{ role: string; message?: string; time_in_call_secs?: number; timeInCallSecs?: number }>;
+  const analysis = full.analysis as Record<string, unknown> | undefined;
+  const metadata = full.metadata as Record<string, unknown> | undefined;
 
   // Build formatted transcript text
   const callerLabel = agent.language === 'en' ? 'Caller' : 'Πελάτης';
@@ -221,23 +221,23 @@ async function recordMissedConversation(
 
   // Duration
   const durationSeconds = Math.ceil(
-    metadata?.call_duration_secs ??
+    (metadata?.call_duration_secs ??
     metadata?.callDurationSecs ??
     (transcript.length > 0
       ? (transcript[transcript.length - 1]?.time_in_call_secs ?? transcript[transcript.length - 1]?.timeInCallSecs ?? 0)
-      : 0)
+      : 0)) as number
   );
 
   // AI analysis
-  const summary = analysis?.transcriptSummary ?? analysis?.transcript_summary ?? null;
+  const summary = (analysis?.transcriptSummary ?? analysis?.transcript_summary ?? null) as string | null;
   const callSuccessful = analysis?.callSuccessful ?? analysis?.call_successful;
 
   // AI data collection
-  const dataCollectionResults = analysis?.dataCollectionResults ?? analysis?.data_collection_results ?? {};
+  const dataCollectionResults = (analysis?.dataCollectionResults ?? analysis?.data_collection_results ?? {}) as Record<string, unknown>;
   const extractedData: Record<string, string> = {};
   if (dataCollectionResults && typeof dataCollectionResults === 'object') {
     for (const [key, val] of Object.entries(dataCollectionResults)) {
-      const v = val as Record<string, any>;
+      const v = val as Record<string, unknown>;
       if (v?.value !== undefined && v.value !== null && String(v.value).trim() !== '') {
         extractedData[key] = String(v.value);
       }
@@ -253,8 +253,8 @@ async function recordMissedConversation(
   }
 
   // Evaluation criteria
-  const evalResults = analysis?.evaluationCriteriaResults ?? analysis?.evaluation_criteria_results ?? {};
-  const appointmentEval = evalResults?.appointment_booked as Record<string, any> | undefined;
+  const evalResults = (analysis?.evaluationCriteriaResults ?? analysis?.evaluation_criteria_results ?? {}) as Record<string, unknown>;
+  const appointmentEval = evalResults?.appointment_booked as Record<string, unknown> | undefined;
   const appointmentBookedByAi = appointmentEval?.result === 'success';
 
   // Appointment data
@@ -272,7 +272,7 @@ async function recordMissedConversation(
 
   // Start time
   const startTimeUnix = metadata?.start_time_unix_secs ?? metadata?.startTimeUnixSecs;
-  const startedAt = startTimeUnix ? new Date(startTimeUnix * 1000) : new Date(Date.now() - durationSeconds * 1000);
+  const startedAt = startTimeUnix ? new Date(Number(startTimeUnix) * 1000) : new Date(Date.now() - durationSeconds * 1000);
   const endedAt = new Date(startedAt.getTime() + durationSeconds * 1000);
 
   // Insert call record

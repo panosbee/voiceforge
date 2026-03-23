@@ -28,7 +28,7 @@ export async function runDataRetentionCleanup(): Promise<void> {
 
   try {
     // Anonymize old calls — keep structure for analytics, remove PII
-    const result = await db
+    await db
       .update(calls)
       .set({
         transcript: null,

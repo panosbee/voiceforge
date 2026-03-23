@@ -16,7 +16,6 @@ import {
   parseDateTimeInTimezone,
   formatTimeInTimezone,
   formatGreekDate,
-  getCurrentDateTime,
 } from '../services/timezone.js';
 import type {
   CalendarCheckPayload,

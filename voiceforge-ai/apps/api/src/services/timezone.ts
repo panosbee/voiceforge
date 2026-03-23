@@ -4,10 +4,6 @@
 // Ensures correct date/time regardless of server location
 // ═══════════════════════════════════════════════════════════════════
 
-import { createLogger } from '../config/logger.js';
-
-const log = createLogger('timezone');
-
 /**
  * Supported IANA timezones used across the platform.
  * Customers select their timezone during onboarding.

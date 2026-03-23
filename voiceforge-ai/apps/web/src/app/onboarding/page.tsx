@@ -182,6 +182,7 @@ export default function OnboardingPage() {
     } finally {
       setIsSubmitting(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, router, setProfile]);
 
   /** Render the current step component */

@@ -174,6 +174,7 @@ export function StepTest({ data, updateData, onNext, onBack }: StepTestProps) {
     } finally {
       setIsCreating(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, updateData]);
 
   // Auto-create preview on first mount if agent data is complete and no preview exists

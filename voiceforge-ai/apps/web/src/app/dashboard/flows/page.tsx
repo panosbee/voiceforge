@@ -83,6 +83,7 @@ export default function FlowsPage() {
     } finally {
       setIsLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFlowId]);
 
   useEffect(() => {
@@ -102,6 +103,7 @@ export default function FlowsPage() {
     } catch {
       toast.error(t.flows.loadFlowError);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

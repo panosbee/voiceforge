@@ -5,8 +5,8 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import { db } from '../db/connection.js';
-import { tasks, agents } from '../db/schema/index.js';
-import { eq, and, lte, isNull, sql } from 'drizzle-orm';
+import { tasks } from '../db/schema/index.js';
+import { eq, and, isNull } from 'drizzle-orm';
 import { env } from '../config/env.js';
 import { createLogger } from '../config/logger.js';
 import { sendTaskReminderEmail, isEmailConfigured } from '../services/email.js';
@@ -81,7 +81,7 @@ export async function runTaskReminders(): Promise<void> {
           reminderNumber: task.reminderCount + 1,
           confirmUrl,
           agentName: task.agent?.name ?? 'AI Agent',
-          locale: (task.agent as any)?.customer?.locale,
+          locale: (task.agent as { customer?: { locale?: string } } | null)?.customer?.locale,
         });
 
         await db.update(tasks)

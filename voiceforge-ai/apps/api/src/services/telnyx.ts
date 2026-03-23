@@ -158,7 +158,7 @@ export async function createAssistant(
   };
 
   // Use any to bypass strict SDK types — Telnyx SDK types may not cover all fields
-  const response = await (client.ai.assistants.create as Function)(body);
+  const response = await (client.ai.assistants.create as (...args: unknown[]) => Promise<unknown>)(body);
 
   const result = response as unknown as Record<string, unknown>;
   const assistantId = (result.id ?? (result.data as Record<string, unknown>)?.id) as string;
@@ -256,7 +256,7 @@ export async function searchAvailableNumbers(
     ...(options.areaCode ? { 'filter[national_destination_code]': options.areaCode } : {}),
   };
 
-  const response = await (client.availablePhoneNumbers.list as Function)(params);
+  const response = await (client.availablePhoneNumbers.list as (...args: unknown[]) => Promise<unknown>)(params);
   const responseData = response as unknown as { data?: unknown[] };
   const rawNumbers = (responseData.data ?? []) as Array<Record<string, unknown>>;
 
@@ -341,7 +341,7 @@ export async function searchAvailableNumbersMaster(
     ...(options.areaCode ? { 'filter[national_destination_code]': options.areaCode } : {}),
   };
 
-  const response = await (masterClient.availablePhoneNumbers.list as Function)(params);
+  const response = await (masterClient.availablePhoneNumbers.list as (...args: unknown[]) => Promise<unknown>)(params);
   const responseData = response as unknown as { data?: unknown[] };
   const rawNumbers = (responseData.data ?? []) as Array<Record<string, unknown>>;
 
@@ -666,7 +666,7 @@ export async function createIntegrationSecret(
 
   log.info({ identifier }, 'Creating integration secret');
 
-  const response = await (client.integrationSecrets.create as Function)({
+  const response = await (client.integrationSecrets.create as (...args: unknown[]) => Promise<unknown>)({
     identifier,
     type: 'bearer',
     token,
@@ -705,7 +705,7 @@ export async function listConversations(
 ) {
   const client = createSubAccountClient(encryptedApiKey);
 
-  const conversations = await (client.ai.conversations.list as Function)({
+  const conversations = await (client.ai.conversations.list as (...args: unknown[]) => Promise<unknown>)({
     'metadata->assistant_id': `eq.${assistantId}`,
     limit,
     order: 'last_message_at.desc',

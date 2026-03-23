@@ -588,7 +588,6 @@ knowledgeBaseRoutes.post('/:id/attach', zValidator('json', attachSchema), async 
 // POST /knowledge-base/resync/:agentId — Force re-sync all KB docs for an agent
 // ═══════════════════════════════════════════════════════════════════
 
-const resyncSchema = z.object({});
 
 knowledgeBaseRoutes.post('/resync/:agentId', async (c) => {
   const user = c.get('user');

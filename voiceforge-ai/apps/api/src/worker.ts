@@ -7,7 +7,7 @@
 import { logger } from './config/index.js';
 import { disconnectDb } from './db/connection.js';
 import { db } from './db/connection.js';
-import { calls, webhookEvents, auditLogs } from './db/schema/index.js';
+import { calls, webhookEvents } from './db/schema/index.js';
 import { lte, sql } from 'drizzle-orm';
 import { env } from './config/env.js';
 import { runConversationSync } from './workers/conversation-sync.js';

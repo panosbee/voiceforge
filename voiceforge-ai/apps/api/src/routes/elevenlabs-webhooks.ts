@@ -7,7 +7,7 @@
 import { Hono } from 'hono';
 import { eq, and, gte, lte, desc } from 'drizzle-orm';
 import { db } from '../db/connection.js';
-import { agents, calls, webhookEvents, appointments, customers, callerMemories, agentTaskEmails, tasks } from '../db/schema/index.js';
+import { agents, calls, webhookEvents, appointments, callerMemories, agentTaskEmails, tasks } from '../db/schema/index.js';
 import { createLogger } from '../config/logger.js';
 import * as elevenlabsService from '../services/elevenlabs.js';
 import { notifyCallCompleted, sendTaskNotificationEmail, isEmailConfigured } from '../services/email.js';
@@ -129,7 +129,7 @@ elevenlabsWebhookRoutes.post('/post-conversation', async (c) => {
     try {
       if (conversationId && elevenlabsService.isConfigured()) {
         const full = await elevenlabsService.getConversation(conversationId);
-        const fullMeta = (full as Record<string, any>)?.metadata;
+        const fullMeta = (full as Record<string, unknown>)?.metadata as Record<string, unknown> | undefined;
         if (typeof fullMeta?.call_duration_secs === 'number') {
           durationSeconds = fullMeta.call_duration_secs;
         }
@@ -152,8 +152,8 @@ elevenlabsWebhookRoutes.post('/post-conversation', async (c) => {
     // Normalize data collection values (may come as { value: "..." } objects or direct strings)
     const extractedData: Record<string, string> = {};
     for (const [key, val] of Object.entries(rawDataCollection)) {
-      if (val && typeof val === 'object' && 'value' in (val as any)) {
-        const v = (val as any).value;
+      if (val && typeof val === 'object' && 'value' in (val as Record<string, unknown>)) {
+        const v = (val as Record<string, unknown>).value;
         if (v !== undefined && v !== null && String(v).trim() !== '') {
           extractedData[key] = String(v);
         }
@@ -238,7 +238,7 @@ elevenlabsWebhookRoutes.post('/post-conversation', async (c) => {
           intentCategory: callerIntent ?? existingCall.intentCategory,
           appointmentBooked,
           durationSeconds: durationSeconds || existingCall.durationSeconds,
-          status: callStatus as any,
+          status: callStatus as typeof calls.$inferInsert.status,
           insightsRaw: {
             analysis: payload.analysis,
             metadata: payload.metadata,
@@ -259,7 +259,7 @@ elevenlabsWebhookRoutes.post('/post-conversation', async (c) => {
         callerNumber,
         agentNumber,
         direction: 'inbound',
-        status: callStatus as any,
+        status: callStatus as typeof calls.$inferInsert.status,
         durationSeconds,
         transcript: transcriptText || null,
         telnyxEventId: conversationId,
@@ -621,7 +621,7 @@ elevenlabsWebhookRoutes.post('/server-tool', async (c) => {
           with: { customer: true },
         })
       : null;
-    const customerTz = (agentRecord?.customer as any)?.timezone || 'Europe/Athens';
+    const customerTz = (agentRecord?.customer as Record<string, unknown> | undefined)?.timezone as string || 'Europe/Athens';
 
     switch (toolName) {
       case 'check_availability': {
@@ -678,7 +678,7 @@ elevenlabsWebhookRoutes.post('/server-tool', async (c) => {
         const allSlotsForDate = generateSlots(bhConfig, requestedDate);
 
         // If the requested date has NO available slots, also check next 3 working days
-        let nextDaysAvailability: Array<{ date: string; available_count: number; sample_slots: string[] }> = [];
+        const nextDaysAvailability: Array<{ date: string; available_count: number; sample_slots: string[] }> = [];
         if (result.available.length === 0) {
           const baseDate = new Date(requestedDate + 'T12:00:00');
           let checked = 0;
@@ -873,7 +873,7 @@ elevenlabsWebhookRoutes.post('/server-tool', async (c) => {
 
           // ── Send .ics email invite (fire-and-forget) ────────────
           try {
-            const customerRecord = agentRecord.customer as any;
+            const customerRecord = agentRecord.customer as { email?: string; locale?: string; businessName?: string };
             if (customerRecord?.email) {
               const { generateIcsInvite } = await import('../services/ics-generator.js');
               const { sendAppointmentInviteEmail } = await import('../services/email.js');
@@ -966,7 +966,7 @@ elevenlabsWebhookRoutes.post('/server-tool', async (c) => {
               eq(callerMemories.customerId, agentRecord.customerId),
               eq(callerMemories.callerPhone, callerPhone),
             ),
-            orderBy: (m: any, { desc }: any) => [desc(m.lastCallAt)],
+            orderBy: (m, { desc }) => [desc(m.lastCallAt)],
             limit: 5,
           });
 

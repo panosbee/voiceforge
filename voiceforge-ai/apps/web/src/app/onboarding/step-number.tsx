@@ -39,6 +39,7 @@ export function StepNumber({ data, updateData, onNext, onBack }: StepNumberProps
 
   useEffect(() => {
     loadOwnedNumbers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadOwnedNumbers = async () => {
