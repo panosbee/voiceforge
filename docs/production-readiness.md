@@ -10,6 +10,8 @@
 
 Bugfixes and code-level issues (race conditions, idempotency, atomicity, missing indexes/constraints) have been moved to GitHub Issues and are tracked on the project board. This report now focuses exclusively on **DevOps, infrastructure, and operational readiness**. Sections 2.x (Critical Issues) and related roadmap items are retained for architectural context but are no longer the actionable checklist — the issue tracker is.
 
+**Consolidated from:** `voiceforge-ai/PRODUCTION_READINESS_PLAN.md` (Greek-language process/governance doc) has been absorbed into this file. This is now the single source of truth for production readiness.
+
 **Stripe removal:** The Stripe billing integration is legacy code from a previous implementation. This project will not use Stripe. All Stripe-related sections, tasks, and references are struck through. The `stripe` dependency, `services/stripe.ts`, `routes/billing.ts`, related DB columns (`stripeCustomerId`, `stripeSubscriptionId`), shared types (`types/billing.ts`), and env vars (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_*_PRICE_ID`) should be removed from the codebase in a future cleanup pass.
 
 ---
@@ -1216,8 +1218,9 @@ For a production service, you need documented procedures for:
 - [ ] **Replace `drizzle-kit push` with versioned migrations** — stop using schema push in production; switch to reviewed, versioned migration files with rollback capability. Deploy via dedicated migration job, not from app container at startup
 - [ ] **Set up CI/CD pipeline** — GitHub Actions: `pnpm install --frozen-lockfile` → typecheck → lint → build → tests → Docker image build → staging deploy → smoke tests. Branch protection on `main` requiring CI to pass. No production deploy without green pipeline
 - [ ] **Verify reproducible Linux build** — web build (Next.js standalone) not yet confirmed on Linux; must pass cleanly in Docker/CI Linux builder before any production deploy
-- [ ] **Unify environment contract** — resolve inconsistencies in env var names between `.env.production.template`, runtime code, and deployment docs. One authoritative env spec so a new operator can set up without guesswork
+- [ ] **Unify environment contract** — resolve inconsistencies in env var names between `.env.production.template`, runtime code, and deployment docs. One authoritative env spec so a new operator can set up without guesswork. Includes deciding API topology (same-domain path-based `https://app.domain.com/api` vs subdomain `https://api.domain.com`) and aligning `API_BASE_URL`, `FRONTEND_URL`, `NEXT_PUBLIC_API_URL`, Nginx `server_name`, and webhook callback URLs accordingly
 - [ ] **Set up container registry and image pipeline** — choose a registry (GHCR, DO Container Registry, or Docker Hub), define image tagging strategy (e.g. `sha-<commit>` + `latest`), build immutable images for `api`, `web`, and `worker` in CI, push to registry. Production deploys pull pre-built images instead of building on the server
+- [ ] **Fix lint gate** — `pnpm lint` fails because the shared package exposes a lint script without a complete ESLint config/dependency. Standardize ESLint at workspace level so `pnpm lint` passes locally and in CI
 
 **Legal & Business (see Section 13 for details):**
 - [ ] **Create Terms of Service page** — `/terms` route, covering service description, liability, acceptable use, EU jurisdiction
@@ -1252,6 +1255,13 @@ For a production service, you need documented procedures for:
 - ~~[ ] Add Stripe idempotency keys to mutation operations~~ *(Stripe removed)*
 - [ ] **Load test with k6 or Artillery** — simulate 20 concurrent calls (single medium business scenario): verify appointment booking under contention, call record dedup, Redis connection stability, pre-call webhook < 1s latency. Then scale to 100 concurrent users to find the breaking point. Run against staging, not production.
 
+**Recommended test layers:**
+- **Unit tests** — pure services and validation (auth middleware, encryption round-trip, env validation, business-hours logic)
+- **Integration tests** — against real Postgres (agent CRUD, GDPR export/delete, registration + license flow, caller memory flow, data-retention worker)
+- **Contract tests** — saved Telnyx, ElevenLabs webhook payload fixtures to catch upstream API changes
+- **E2E tests** — Playwright for core web flows (onboarding, agent creation, dashboard)
+- **Load tests** — webhook burst handling and concurrent call ingestion on staging
+
 ### Phase 3: Scale Preparation (First Quarter)
 
 **Engineering:**
@@ -1274,7 +1284,7 @@ For a production service, you need documented procedures for:
 - [ ] Add cookie consent banner (if analytics cookies are in use)
 - [ ] Document ElevenLabs outage fallback procedure (voicemail or recorded message)
 
-**Feature completeness:**
+**Feature completeness (each item needs explicit decision: ship / hide in beta / defer to post-launch):**
 - [ ] Google Calendar write-back — `createGoogleCalendarEvent()` using Calendar API v3 (OAuth tokens already stored)
 - [ ] Push notifications — web-push service, service worker registration, new `push_subscriptions` table (per-user subscription storage), send on call/appointment events
 - [ ] SMS appointment confirmations — `telnyx.messages.create()` after booking (Telnyx SMS already configured)
