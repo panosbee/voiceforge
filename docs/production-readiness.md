@@ -6,11 +6,17 @@
 **Assessed by:** Senior Engineer Audit (full-stack + DevOps)
 **Re-audit commit:** `554954b` (merged changes from project owner)
 
+### Scope Change (2026-03-23)
+
+Bugfixes and code-level issues (race conditions, idempotency, atomicity, missing indexes/constraints) have been moved to GitHub Issues and are tracked on the project board. This report now focuses exclusively on **DevOps, infrastructure, and operational readiness**. Sections 2.x (Critical Issues) and related roadmap items are retained for architectural context but are no longer the actionable checklist — the issue tracker is.
+
+**Stripe removal:** The Stripe billing integration is legacy code from a previous implementation. This project will not use Stripe. All Stripe-related sections, tasks, and references are struck through. The `stripe` dependency, `services/stripe.ts`, `routes/billing.ts`, related DB columns (`stripeCustomerId`, `stripeSubscriptionId`), shared types (`types/billing.ts`), and env vars (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_*_PRICE_ID`) should be removed from the codebase in a future cleanup pass.
+
 ---
 
 ## Executive Summary
 
-VoiceForge AI has strong security fundamentals and a clean monorepo architecture. The core design is sound — ElevenLabs handles all voice AI processing while our API handles data and tool calls. However, there are **critical data integrity gaps** under concurrent load: appointment double-bookings when multiple callers request the same slot, duplicate call records from the dual webhook system (Telnyx + ElevenLabs both fire for the same call), a Redis anti-pattern that creates a new connection per request, and no Stripe webhook idempotency. The codebase is well-organized and the fixes are surgical — this is a concurrency hardening exercise, not a rewrite.
+VoiceForge AI has strong security fundamentals and a clean monorepo architecture. The core design is sound — ElevenLabs handles all voice AI processing while our API handles data and tool calls. However, there are **critical data integrity gaps** under concurrent load: appointment double-bookings when multiple callers request the same slot, duplicate call records from the dual webhook system (Telnyx + ElevenLabs both fire for the same call), and a Redis anti-pattern that creates a new connection per request. The codebase is well-organized and the fixes are surgical — this is a concurrency hardening exercise, not a rewrite.
 
 **Verdict:** Safe for a closed beta (< 10 customers, supervised). Not safe for unsupervised production traffic. A single medium-sized customer with 20 concurrent calls will trigger the double-booking and duplicate record bugs.
 
@@ -32,7 +38,7 @@ Merged changes from project owner (commits `4fb04dc`..`554954b`). Re-verified al
 
 **Items STILL PRESENT (no change):**
 - Redis connection-per-request anti-pattern (2.1)
-- Stripe webhook idempotency missing (2.2)
+- ~~Stripe webhook idempotency missing (2.2)~~ *(Stripe removed — not applicable)*
 - Phone number purchase not atomic (2.3)
 - Appointment booking race condition — no unique constraint, no transactions (2.4)
 - Admin secret hardcoded with fallback (2.5)
@@ -66,7 +72,8 @@ Merged changes from project owner (commits `4fb04dc`..`554954b`). Re-verified al
 14. [Priority Roadmap](#14-priority-roadmap)
 15. [Supabase Configuration Checklist](#15-supabase-configuration-checklist)
 16. [Deployment Runbook (First Production Deploy)](#16-deployment-runbook)
-17. [Pre-Launch Checklist](#17-pre-launch-checklist)
+17. [Hypercare Plan (First 72 Hours Post-Launch)](#17-hypercare-plan)
+18. [Pre-Launch Checklist](#18-pre-launch-checklist)
 
 ---
 
@@ -91,7 +98,7 @@ voiceforge-ai/
 | Cache | Redis 7 (ioredis) | Rate limiting only (no query caching) |
 | AI Voice | ElevenLabs Conversational AI | Agent orchestration, TTS, STT, KB RAG |
 | Telephony | Telnyx | Greek +30 numbers, SIP trunk to ElevenLabs |
-| Billing | Stripe | Subscriptions, checkout, portal |
+| ~~Billing~~ | ~~Stripe~~ | ~~Subscriptions, checkout, portal~~ *(legacy — to be removed)* |
 | Email | Resend | Transactional email |
 | In-app Chat | OpenAI GPT | Support chatbot |
 | Auth | Supabase (prod), local JWT (dev) | Stateless JWT auth |
@@ -190,16 +197,16 @@ async check(key, limit, windowMs) {
 
 **Fix:** Create a single shared Redis connection at module initialization.
 
-### 2.2 Stripe Webhook Has No Idempotency Check
+### ~~2.2 Stripe Webhook Has No Idempotency Check~~ *(Stripe removed — not applicable)*
 
-**Location:** `routes/billing.ts:232-357`
-**Severity:** CRITICAL — risk of duplicate charges / double state mutations
+~~**Location:** `routes/billing.ts:232-357`~~
+~~**Severity:** CRITICAL — risk of duplicate charges / double state mutations~~
 
-Stripe retries webhooks on timeout (up to 3 days). The handler processes events without checking if the `event.id` was already handled. The `webhook_events` table exists for idempotency tracking, but **it is never used in the billing webhook handler**.
+~~Stripe retries webhooks on timeout (up to 3 days). The handler processes events without checking if the `event.id` was already handled. The `webhook_events` table exists for idempotency tracking, but **it is never used in the billing webhook handler**.~~
 
-**Impact:** Network timeout during webhook processing -> Stripe retries -> `checkout.session.completed` fires twice -> subscription activated twice, potential double email, corrupted state.
+~~**Impact:** Network timeout during webhook processing -> Stripe retries -> `checkout.session.completed` fires twice -> subscription activated twice, potential double email, corrupted state.~~
 
-**Fix:** Check `event.id` against `webhook_events` before processing. Wrap in a transaction.
+~~**Fix:** Check `event.id` against `webhook_events` before processing. Wrap in a transaction.~~
 
 ### 2.3 Phone Number Purchase Is Not Atomic
 
@@ -303,12 +310,12 @@ Caller memory is upserted by `(customerId, callerPhone)`. If the same person cal
 
 **Severity:** CRITICAL — customers can exceed plan limits with zero billing consequence
 
-Plan limits are defined in `packages/shared/src/constants.ts` (Basic: X minutes, Pro: Y minutes, Enterprise: Z minutes). Stripe subscriptions are working. But there is **no call-minute counter per billing cycle**, no Stripe Meter API reporting, and no overage enforcement.
+Plan limits are defined in `packages/shared/src/constants.ts` (Basic: X minutes, Pro: Y minutes, Enterprise: Z minutes). ~~Stripe subscriptions are working.~~ But there is **no call-minute counter per billing cycle**, ~~no Stripe Meter API reporting,~~ and no overage enforcement.
 
 **What's missing:**
 1. No `duration_seconds` tracking aggregated per billing period
 2. No `usage_records` table to track minutes consumed vs plan limits
-3. No Stripe metering API integration (`stripe.billing.meterEvents.create()`)
+3. ~~No Stripe metering API integration (`stripe.billing.meterEvents.create()`)~~ *(Stripe removed)*
 4. No soft-limit enforcement (e.g., pause agent when quota exceeded)
 
 **Fix:**
@@ -321,15 +328,15 @@ CREATE TABLE usage_records (
   minutes_used DECIMAL(8,2) DEFAULT 0,
   minutes_limit INTEGER,
   overage_minutes DECIMAL(8,2) DEFAULT 0,
-  reported_to_stripe BOOLEAN DEFAULT false,
+  -- reported_to_stripe BOOLEAN DEFAULT false, (Stripe removed)
   created_at TIMESTAMPTZ DEFAULT now()
 );
 ```
 
 **Backend changes:**
 1. In `elevenlabs-webhooks.ts` post-conversation handler: calculate `duration_seconds`, update `calls` record
-2. Create `usageService.reportUsage(customerId, minutes)` that calls `stripe.billing.meterEvents.create()`
-3. Worker: nightly job to aggregate and report to Stripe
+2. ~~Create `usageService.reportUsage(customerId, minutes)` that calls `stripe.billing.meterEvents.create()`~~ *(Stripe removed)*
+3. ~~Worker: nightly job to aggregate and report to Stripe~~ *(Stripe removed)*
 4. Soft-limit enforcement: if customer exceeds quota, pause agent via ElevenLabs API
 
 **Estimated effort:** 5 days
@@ -391,7 +398,7 @@ Each user is a business with 1-3 agents. Peak concurrent calls across all users:
 | **ElevenLabs minutes** | 300-500 min/day (10 customers) | Scale plan: 3,600 min/mo (~120/day) | **WILL EXHAUST in ~1 week** |
 | **ElevenLabs API** | 10-30 calls/day | Per-account limits, singleton client | OK |
 | **Telnyx webhooks** | 20-60/day | 500/min rate limit | OK |
-| **Stripe webhooks** | 0-5/day | No idempotency | RISK |
+| ~~**Stripe webhooks**~~ | ~~0-5/day~~ | ~~No idempotency~~ | ~~RISK~~  *(Stripe removed)* |
 | **Appointment booking** | Low concurrency | Race condition exists but rarely triggers | LATENT RISK |
 | **PostgreSQL storage** | ~100MB/month | 10GB default | OK |
 | **Memory (API)** | ~150MB | 512MB limit | OK |
@@ -415,7 +422,7 @@ Peak concurrent calls across all users: ~50-100. Peak concurrent appointment boo
 | **Appointment double-bookings** | ~5-10 concurrent bookings/min | No protection | **WILL HAPPEN** |
 | **Call record duplication** | 100-200 webhook pairs/day | No unique constraint | **WILL HAPPEN** |
 | **Telnyx webhooks** | 400-1,000/day | 500/min limit | OK |
-| **Stripe webhooks** | 50-100/month | No idempotency | HIGH RISK |
+| ~~**Stripe webhooks**~~ | ~~50-100/month~~ | ~~No idempotency~~ | ~~HIGH RISK~~ *(Stripe removed)* |
 | **PostgreSQL storage** | ~1GB/month | 10GB, needs monitoring | MONITOR |
 | **Memory (API x2 PM2)** | ~300MB each | 512MB limit each | OK |
 | **Worker** | 3 tasks, every 2min-24h | 256MB, single instance | OK |
@@ -423,7 +430,7 @@ Peak concurrent calls across all users: ~50-100. Peak concurrent appointment boo
 **Required changes for 100 users:**
 1. Fix Redis connection pooling (critical)
 2. Add unique constraints + transactions for appointments and call records
-3. Add Stripe webhook idempotency
+3. ~~Add Stripe webhook idempotency~~ *(Stripe removed)*
 4. Add pagination to agent listing
 5. Scale PM2 to 4 instances (or use horizontal scaling)
 6. Increase DB pool to 50 (and configure PostgreSQL `max_connections` accordingly)
@@ -444,7 +451,7 @@ Peak concurrent calls: ~200-500. Peak concurrent bookings: ~20-50/min.
 | **ElevenLabs** | 2,000-5,000 calls/day, 200-500 concurrent | Enterprise plan required, multiple API keys | Single Scale plan key (30 concurrent, 3,600 min/mo) |
 | **Concurrent calls** | 200-500 simultaneous | ElevenLabs Enterprise with high concurrency | Unknown limit |
 | **Appointment booking** | 20-50 concurrent/min | Transactions + unique constraints mandatory | None |
-| **Stripe** | 500-1,000 events/month | Idempotency mandatory | Missing |
+| ~~**Stripe**~~ | ~~500-1,000 events/month~~ | ~~Idempotency mandatory~~ | ~~Missing~~ *(Stripe removed)* |
 | **PostgreSQL** | 10GB+/month (calls, transcripts) | Partitioning, archiving, S3 for recordings | No archival strategy |
 | **Search** | Full-text search on transcripts | ElasticSearch or pg_trgm | Not implemented |
 
@@ -491,7 +498,7 @@ These columns are queried in webhook handlers. Pre-call webhook must respond **<
 | `agents` | `telnyxAssistantId` | `webhooks.ts:128` | ~~High~~ | ~~Add index~~ **FIXED:** Has `.unique()` constraint (acts as index) |
 | `calls` | `telnyxConversationId` | Already indexed + unique | -- | -- |
 | `appointments` | `(customerId, scheduledAt)` | `elevenlabs-webhooks.ts:636-648` (slot check during live call) | ~~**HIGH — blocks caller on the phone**~~ | ~~Add composite index~~ **FIXED:** `idx_appointments_scheduled` index exists on `(customerId, scheduledAt)` |
-| `customers` | `stripeCustomerId` | `billing.ts:331` | Medium | Add index |
+| ~~`customers`~~ | ~~`stripeCustomerId`~~ | ~~`billing.ts:331`~~ | ~~Medium~~ | ~~Add index~~ *(Stripe removed)* |
 | `caller_memories` | `(customerId, callerPhone)` | `elevenlabs-webhooks.ts:376` (memory lookup) | Medium | Already indexed |
 | `pending_registrations` | `status` | `admin.ts:84` | Low | Add index if table grows |
 
@@ -516,7 +523,7 @@ These columns are queried in webhook handlers. Pre-call webhook must respond **<
 | Caller memory upsert | `elevenlabs-webhooks.ts:376-425` | Counter/sentiment overwrite | Medium — same caller, two quick calls |
 | Webhook idempotency check | `webhooks.ts:103-110`, `elevenlabs-webhooks.ts:68-77` | Duplicate processing | **High — dual webhook system** |
 | Worker conversation sync | `conversation-sync.ts:109-133` | Races with real-time webhooks | Medium — 2-min poll interval |
-| Stripe checkout -> DB update | `billing.ts:253-266` | Double activation if webhook retried | Low-Medium |
+| ~~Stripe checkout -> DB update~~ | ~~`billing.ts:253-266`~~ | ~~Double activation if webhook retried~~ | ~~Low-Medium~~ *(Stripe removed)* |
 
 ### Missing Unique Constraints
 
@@ -600,22 +607,24 @@ These columns are queried in webhook handlers. Pre-call webhook must respond **<
 2. Add error handling for FQDN assignment (line 427-438)
 3. Cache sub-account clients by customer ID (LRU, 5-min TTL)
 
-### Stripe (Billing)
+### ~~Stripe (Billing)~~ *(legacy — to be removed)*
 
-**Location:** `services/stripe.ts` + `routes/billing.ts`
+~~**Location:** `services/stripe.ts` + `routes/billing.ts`~~
 
 | Aspect | Status | Detail |
 |--------|--------|--------|
-| Webhook signature | HMAC-SHA256 via SDK | Good |
-| Idempotency keys on mutations | **Missing** | `stripe.customers.create()`, `stripe.checkout.sessions.create()` — no idempotency key |
-| Webhook idempotency | **Missing** | `event.id` not checked against DB (see 2.2) |
-| Payment failure handling | Email notification | One-shot attempt, no retry if email fails |
-| Subscription state machine | Handles active/past_due/canceled/unpaid | Good coverage |
+| ~~Webhook signature~~ | ~~HMAC-SHA256 via SDK~~ | ~~Good~~ |
+| ~~Idempotency keys on mutations~~ | ~~**Missing**~~ | ~~`stripe.customers.create()`, `stripe.checkout.sessions.create()` — no idempotency key~~ |
+| ~~Webhook idempotency~~ | ~~**Missing**~~ | ~~`event.id` not checked against DB (see 2.2)~~ |
+| ~~Payment failure handling~~ | ~~Email notification~~ | ~~One-shot attempt, no retry if email fails~~ |
+| ~~Subscription state machine~~ | ~~Handles active/past_due/canceled/unpaid~~ | ~~Good coverage~~ |
 
-**Recommendations:**
-1. Add `idempotencyKey` to all Stripe mutation calls
-2. Check `event.id` in `webhook_events` table before processing
-3. Add retry for payment failure email (or use Resend's built-in retry)
+~~**Recommendations:**~~
+1. ~~Add `idempotencyKey` to all Stripe mutation calls~~
+2. ~~Check `event.id` in `webhook_events` table before processing~~
+3. ~~Add retry for payment failure email (or use Resend's built-in retry)~~
+
+*Stripe is not used in this project. The entire billing integration (`services/stripe.ts`, `routes/billing.ts`, DB columns, shared types) is legacy code to be removed.*
 
 ### Resend (Email)
 
@@ -631,7 +640,7 @@ These columns are queried in webhook handlers. Pre-call webhook must respond **<
 | Template management | Inline HTML | Acceptable for current scale |
 | Welcome email | **FIXED** (since last audit) | Sent on onboarding completion (`customers.ts:230`) |
 | Call summary email | **FIXED** (since last audit) | `notifyCallCompleted()` called in both `elevenlabs-webhooks.ts:292` and `conversation-sync.ts:305` |
-| Payment failure email | **FIXED** (since last audit) | `sendPaymentFailedEmail()` on `invoice.payment_failed` Stripe event (`billing.ts:335`) |
+| ~~Payment failure email~~ | ~~**FIXED** (since last audit)~~ | ~~`sendPaymentFailedEmail()` on `invoice.payment_failed` Stripe event (`billing.ts:335`)~~ *(Stripe removed)* |
 | License key email | Working | Sends with .ics calendar invite support |
 | Appointment invite email | **FIXED** (since last audit) | `sendAppointmentInviteEmail()` with .ics attachment |
 | FROM address | **FIXED** (since last audit) | Now configurable via `EMAIL_FROM` env var (`env.ts:85`) |
@@ -685,7 +694,7 @@ Agent/Customer UPDATE -> invalidate Redis cache keys
 | Feature | Implementation | Assessment |
 |---------|---------------|------------|
 | Encryption at rest | AES-256-GCM, random IV per operation, auth tag | Industry standard |
-| Webhook verification | Ed25519 (Telnyx) + HMAC-SHA256 (Stripe) + 5-min replay protection | Excellent |
+| Webhook verification | Ed25519 (Telnyx) + ~~HMAC-SHA256 (Stripe)~~ + 5-min replay protection | Excellent |
 | Auth | Stateless JWT, local HS256 verification, no HTTP round-trip in prod | Fast + secure |
 | Rate limiting | Redis-backed sliding window with Lua atomic ops, plan-based tiers | Well-designed (fix connection issue) |
 | Input validation | Zod on all endpoints | Comprehensive |
@@ -734,7 +743,7 @@ Agent/Customer UPDATE -> invalidate Redis cache keys
 |---------|--------|--------|
 | **Retry with backoff** (ElevenLabs, Resend) | Transient failures = silent data loss | 1 day |
 | **Circuit breaker** (all external APIs) | One down service cascades to all operations | 2 days |
-| **Idempotency keys** (Stripe mutations) | Network retries create duplicate resources | Half day |
+| ~~**Idempotency keys** (Stripe mutations)~~ | ~~Network retries create duplicate resources~~ | ~~Half day~~ *(Stripe removed)* |
 | **Request timeout** (raw fetch calls) | Hung requests consume connection pool | Half day |
 | **Dead letter queue** | Failed webhook events are lost on process restart | 1-2 days |
 | **Outbox pattern** | Webhook processing not durable across restarts | 2-3 days |
@@ -938,9 +947,9 @@ docker compose -f docker-compose.yml -f docker-compose.production.yml up -d
 
 **Environment-aware configuration:**
 All app configuration must branch on `NODE_ENV` (`development` / `staging` / `production`). Each environment uses its own `.env` file with the appropriate keys:
-- **Development:** Local Supabase (or dev JWT), Stripe test keys, ElevenLabs free-tier, Resend sandbox
-- **Staging:** Separate Supabase project, Stripe test keys, ElevenLabs free-tier, Resend with staging domain
-- **Production:** Production Supabase, Stripe live keys, ElevenLabs paid plan, Resend with verified production domain
+- **Development:** Local Supabase (or dev JWT), ElevenLabs free-tier, Resend sandbox
+- **Staging:** Separate Supabase project, ElevenLabs free-tier, Resend with staging domain
+- **Production:** Production Supabase, ElevenLabs paid plan, Resend with verified production domain
 
 The `.env` file at the monorepo root determines which environment runs. Symlinks from `apps/api/.env` and `apps/web/.env` point to it (same pattern as current dev setup). Never commit `.env` files — only `.env.example`.
 
@@ -951,13 +960,13 @@ The `.env` file at the monorepo root determines which environment runs. Symlinks
 2. Branch protection: can't merge if any step fails
 
 **On merge to `main` (auto-deploy to staging):**
-1. SSH into staging droplet, `git pull`, `docker compose -f docker-compose.yml -f docker-compose.staging.yml up -d --build`
-2. Containers start via entrypoint script: `pnpm install --frozen-lockfile` → `pnpm db:migrate` → `pnpm start`
+1. CI builds Docker images for `api`, `web`, `worker`, tags with commit SHA, pushes to container registry
+2. SSH into staging droplet, pull images from registry, `docker compose -f docker-compose.yml -f docker-compose.staging.yml up -d` (no `--build` on server)
 3. Run smoke tests from CI against staging URL (health check, auth, basic CRUD) — these are CI steps, not in Docker Compose
 4. Manual approval gate (GitHub environment protection rule) to promote to production
 
 **On approval (auto-deploy to production):**
-1. SSH into production droplet, `git pull`, `docker compose -f docker-compose.yml -f docker-compose.production.yml up -d --build`
+1. SSH into production droplet, pull the same images that passed staging, `docker compose -f docker-compose.yml -f docker-compose.production.yml up -d`
 2. Same entrypoint: install → migrate → start
 
 **API container entrypoint script (`docker/entrypoint.sh`):**
@@ -971,7 +980,7 @@ exec pnpm start
 
 **Staging environment:**
 - Separate DO droplet (4 GB / 2 vCPU is enough)
-- Separate `.env.staging`: Telnyx dev account, ElevenLabs free-tier key, Stripe test-mode keys, separate Supabase project
+- Separate `.env.staging`: Telnyx dev account, ElevenLabs free-tier key, separate Supabase project
 - Separate subdomain (e.g., `staging.voiceforge.salimov.ai`)
 - DB seed script (run once on initial setup, re-run manually to reset): creates realistic data — customers, agents, call history with transcripts/sentiment, appointments, caller memories
 - On deploy, only run migrations — don't re-seed. Staging should accumulate real-looking state to catch migration bugs against existing data.
@@ -1028,7 +1037,7 @@ When handling 50+ concurrent calls across all customers:
 | **DO Spaces** | Recordings, GDPR exports | ~$5-10/mo |
 | **Total** | | **~$400-600/mo** |
 
-*All estimates exclude ElevenLabs, Telnyx, Stripe, OpenAI usage costs (billed per customer separately).*
+*All estimates exclude ElevenLabs, Telnyx, OpenAI usage costs (billed per customer separately).*
 
 ### Security Hardening Checklist (Current Droplet)
 
@@ -1070,7 +1079,7 @@ When handling 50+ concurrent calls across all customers:
 
 | Priority | Test | Type | What It Prevents |
 |----------|------|------|-----------------|
-| P0 | Stripe webhook idempotency | Integration | Duplicate charges |
+| ~~P0~~ | ~~Stripe webhook idempotency~~ | ~~Integration~~ | ~~Duplicate charges~~ *(Stripe removed)* |
 | P0 | Auth middleware — valid/invalid/expired JWT | Unit | Auth bypass |
 | P0 | Webhook signature verification | Unit | Webhook spoofing |
 | P0 | Encryption round-trip (encrypt then decrypt) | Unit | Data loss |
@@ -1093,9 +1102,9 @@ Beyond code and infrastructure, a production SaaS targeting SMEs needs legal, op
 | Item | Status | Detail |
 |------|--------|--------|
 | **Terms of Service page** | **MISSING** | No `/terms` route. Required before accepting payments or storing customer data. Must cover: service description, liability limits, acceptable use, termination, Greek/EU law jurisdiction. |
-| **Privacy Policy page** | **MISSING** | No `/privacy` route. Required by GDPR (Article 13/14) before collecting any personal data. Must cover: data controller identity, data processed, retention periods, third-party processors (ElevenLabs, Telnyx, Stripe, Supabase, OpenAI, Resend), data subject rights, DPO contact. |
+| **Privacy Policy page** | **MISSING** | No `/privacy` route. Required by GDPR (Article 13/14) before collecting any personal data. Must cover: data controller identity, data processed, retention periods, third-party processors (ElevenLabs, Telnyx, Supabase, OpenAI, Resend), data subject rights, DPO contact. |
 | **Cookie Consent Banner** | **MISSING** | If analytics are added, EU ePrivacy Directive requires consent before setting non-essential cookies. Not needed if no analytics/tracking cookies. |
-| **DPA (Data Processing Agreement)** | **MISSING** | GDPR requires a DPA with each sub-processor. You need DPAs on file with ElevenLabs, Telnyx, Stripe, Supabase, Resend, OpenAI, DigitalOcean. Most provide standard DPAs — download and sign them. |
+| **DPA (Data Processing Agreement)** | **MISSING** | GDPR requires a DPA with each sub-processor. You need DPAs on file with ElevenLabs, Telnyx, Supabase, Resend, OpenAI, DigitalOcean. Most provide standard DPAs — download and sign them. |
 | **GDPR data deletion** | Done | Full account deletion (`DELETE /gdpr/delete-account`) and selective call data deletion (`DELETE /gdpr/delete-calls`) implemented in `routes/gdpr.ts`. |
 | **GDPR data export** | Done | `GET /gdpr/export` returns all customer data (profile, agents, calls, appointments, audit logs). |
 | **Audit logging** | Done | `audit_logs` table tracks data access, deletion, settings changes. |
@@ -1108,7 +1117,7 @@ Beyond code and infrastructure, a production SaaS targeting SMEs needs legal, op
 | **Product analytics** | **MISSING** — no tracking at all | Add Plausible (privacy-friendly, EU-hosted, no cookie consent needed) or PostHog (self-hostable). Track: signups, onboarding completion, first call, agent creation, churn. |
 | **Marketing attribution** | **MISSING** | Add UTM tracking on landing page CTAs. Track which channel (Google, social, referral) drives signups. |
 | **Business KPIs dashboard** | **MISSING** | Admin panel has basic stats (customer count, license counts). Missing: MRR, churn rate, calls/customer, avg call duration, NPS. |
-| **Revenue tracking** | Partially done | Stripe handles billing, but no internal revenue dashboard or MRR calculation. |
+| **Revenue tracking** | **MISSING** | No internal revenue dashboard or MRR calculation. |
 
 ### SEO & Social (Required for Organic Growth)
 
@@ -1158,7 +1167,7 @@ Beyond code and infrastructure, a production SaaS targeting SMEs needs legal, op
 | **Extend license expiry** | **MISSING** | Cannot extend a customer's license without generating a new key |
 | **View customer's calls/agents** | **MISSING** | Admin cannot see a customer's call history or agent configuration |
 | **Manual billing actions** | **MISSING** | Cannot record manual payments, issue credits, or adjust invoices |
-| **System health dashboard** | **MISSING** | No view of ElevenLabs/Telnyx/Stripe status, error rates, or system metrics in admin |
+| **System health dashboard** | **MISSING** | No view of ElevenLabs/Telnyx status, error rates, or system metrics in admin |
 
 ### External Service Account Setup
 
@@ -1168,7 +1177,7 @@ Before production, these accounts need to be on production-ready plans:
 |---------|---------------|----------------------|
 | **ElevenLabs** | Scale plan ($330/mo) — 30 concurrent, 3,600 min/mo, overage at $0.10/min | Sufficient concurrency for beta (30 calls). **Minutes are the bottleneck:** 10 active customers will exhaust 3,600 min/mo in ~1 week. Overage charges apply at $0.10/min. Upgrade to Business ($1,320/mo, 13,750 min) when minute spend exceeds ~$1,000/mo in overages. |
 | **Telnyx** | Unknown (demo API key) | Production account with Greek +30 number inventory. Verify Telnyx SIP trunk supports required concurrent call volume. |
-| **Stripe** | Unknown (test/live mode?) | Switch from test mode to live mode. Verify webhook endpoints point to production URL. |
+| ~~**Stripe**~~ | ~~Unknown (test/live mode?)~~ | ~~Switch from test mode to live mode. Verify webhook endpoints point to production URL.~~ *(Stripe removed — not used)* |
 | **Supabase** | Unknown | Production project with proper JWT secret. Verify Row-Level Security policies if applicable. |
 | **Resend** | Unknown | Verify domain is authenticated (SPF/DKIM/DMARC) for `noreply@salimov.ai` to avoid spam folder. |
 | **Domain DNS** | voiceforge.salimov.ai | Verify SPF, DKIM, DMARC records for email deliverability. Add CAA record for Let's Encrypt. |
@@ -1194,73 +1203,53 @@ For a production service, you need documented procedures for:
 
 **Estimated effort: 7-9 days (code) + 2-3 days (infrastructure) + 1-2 days (legal/business)**
 
-**Code fixes:**
-- [ ] **Fix Redis connection pooling** — create singleton connection, reuse across requests (`rate-limit.ts`) — [#1](https://github.com/Salimov-AI/voicecall/issues/1)
-- [ ] **Fix appointment double-booking** — add `UNIQUE(customer_id, scheduled_at)` constraint on `appointments` table, wrap all 3 booking paths in `db.transaction()` with `ON CONFLICT` handling (`elevenlabs-webhooks.ts:636-689`, `elevenlabs-webhooks.ts:323-343`, `tools.ts:180-210`) — [#2](https://github.com/Salimov-AI/voicecall/issues/2)
-- [ ] **Fix call record duplication** — ~~add `UNIQUE` on `calls(telnyxConversationId)`~~ (done), still need `ON CONFLICT UPDATE` in both Telnyx and ElevenLabs webhook handlers + wrap idempotency check + insert in transaction (`webhooks.ts:103-158`, `elevenlabs-webhooks.ts:199-234`) — [#3](https://github.com/Salimov-AI/voicecall/issues/3)
-- [ ] **Add Stripe webhook idempotency** — check `event.id` in `webhook_events` table before processing (`billing.ts`) — [#4](https://github.com/Salimov-AI/voicecall/issues/4)
-- [ ] **Implement usage metering** — `usage_records` table, Stripe Meter API integration, nightly aggregation worker, soft-limit enforcement (see Section 2.9) — [#5](https://github.com/Salimov-AI/voicecall/issues/5)
-- [ ] **Remove admin secret fallback** — require `ADMIN_SECRET` env var, remove `?token=` query param auth (`admin.ts`) — [#6](https://github.com/Salimov-AI/voicecall/issues/6)
-- [ ] **Add rate limiting to admin + GDPR routes** — pre-configured limiters exist but are NOT attached (`admin.ts`, `gdpr.ts`, `index.ts`) — [#7](https://github.com/Salimov-AI/voicecall/issues/7)
-- [ ] **Fix phone number purchase atomicity** — 5-step pipeline with no transaction; money charged on step 1, steps 3-4 silently swallow errors. Add compensating transaction pattern: if later steps fail, store failure state and expose "retry SIP setup" in admin (`numbers.ts:103-194`) — [#21](https://github.com/Salimov-AI/voicecall/issues/21)
-- [ ] **Add missing DB indexes** — `agents.phoneNumber` (pre-call 1s deadline) [#8](https://github.com/Salimov-AI/voicecall/issues/8), `agents.elevenlabsAgentId` (verify index exists despite `.unique()`) [#22](https://github.com/Salimov-AI/voicecall/issues/22)
-- [ ] **Add missing DB constraints** — `UNIQUE(customer_id, caller_phone)` on `caller_memories` to prevent duplicate memory rows — [#23](https://github.com/Salimov-AI/voicecall/issues/23)
-- [ ] **Move IBAN to env var** (`registration.ts`) — [#9](https://github.com/Salimov-AI/voicecall/issues/9)
-
 **Infrastructure (see Section 11 for details):**
-- [ ] **Provision DO Managed Postgres** ($15/mo), migrate data with `pg_dump`/`psql`, remove Postgres from Docker Compose, update `DATABASE_URL` — [#10](https://github.com/Salimov-AI/voicecall/issues/10)
-- [ ] **Enable DO daily backups** on droplet (~$7/mo) — [#11](https://github.com/Salimov-AI/voicecall/issues/11)
-- [ ] **Harden SSH** — disable password auth, install fail2ban, enable unattended-upgrades — [#12](https://github.com/Salimov-AI/voicecall/issues/12)
-- [ ] **Clean up old co-hosted app** — remove stale containers, volumes, Nginx configs — [#13](https://github.com/Salimov-AI/voicecall/issues/13)
-- [ ] **Verify DO Cloud Firewall** — only ports 22, 80, 443 inbound — [#14](https://github.com/Salimov-AI/voicecall/issues/14)
-- [ ] **Set `.env.production` permissions** to `chmod 600` — [#15](https://github.com/Salimov-AI/voicecall/issues/15)
-- [ ] **Set up Docker Compose environment overrides** — create `docker-compose.yml` (base), `docker-compose.dev.yml`, `docker-compose.staging.yml`, `docker-compose.production.yml` with environment-specific resource limits and configs (see Section 11) — [#24](https://github.com/Salimov-AI/voicecall/issues/24)
-- [ ] **Set up staging environment** — separate DO droplet (4 GB / 2 vCPU), separate `.env.staging` (Telnyx dev account, ElevenLabs free-tier, Stripe test keys, separate Supabase project), staging subdomain (e.g. `staging.voiceforge.salimov.ai`), DB seed script for realistic test data — [#25](https://github.com/Salimov-AI/voicecall/issues/25)
+- [ ] **Provision DO Managed Postgres** ($15/mo), migrate data with `pg_dump`/`psql`, remove Postgres from Docker Compose, update `DATABASE_URL`
+- [ ] **Enable DO daily backups** on droplet (~$7/mo)
+- [ ] **Harden SSH** — disable password auth, install fail2ban, enable unattended-upgrades
+- [ ] **Clean up old co-hosted app** — remove stale containers, volumes, Nginx configs
+- [ ] **Verify DO Cloud Firewall** — only ports 22, 80, 443 inbound
+- [ ] **Set `.env.production` permissions** to `chmod 600`
+- [ ] **Set up Docker Compose environment overrides** — create `docker-compose.yml` (base), `docker-compose.dev.yml`, `docker-compose.staging.yml`, `docker-compose.production.yml` with environment-specific resource limits and configs (see Section 11)
+- [ ] **Set up staging environment** — separate DO droplet (4 GB / 2 vCPU), separate `.env.staging` (Telnyx dev account, ElevenLabs free-tier, separate Supabase project), staging subdomain (e.g. `staging.voiceforge.salimov.ai`), DB seed script for realistic test data
+- [ ] **Verify email deliverability** — SPF, DKIM, DMARC records for `salimov.ai` domain
+- [ ] **Replace `drizzle-kit push` with versioned migrations** — stop using schema push in production; switch to reviewed, versioned migration files with rollback capability. Deploy via dedicated migration job, not from app container at startup
+- [ ] **Set up CI/CD pipeline** — GitHub Actions: `pnpm install --frozen-lockfile` → typecheck → lint → build → tests → Docker image build → staging deploy → smoke tests. Branch protection on `main` requiring CI to pass. No production deploy without green pipeline
+- [ ] **Verify reproducible Linux build** — web build (Next.js standalone) not yet confirmed on Linux; must pass cleanly in Docker/CI Linux builder before any production deploy
+- [ ] **Unify environment contract** — resolve inconsistencies in env var names between `.env.production.template`, runtime code, and deployment docs. One authoritative env spec so a new operator can set up without guesswork
+- [ ] **Set up container registry and image pipeline** — choose a registry (GHCR, DO Container Registry, or Docker Hub), define image tagging strategy (e.g. `sha-<commit>` + `latest`), build immutable images for `api`, `web`, and `worker` in CI, push to registry. Production deploys pull pre-built images instead of building on the server
 
 **Legal & Business (see Section 13 for details):**
-- [ ] **Create Terms of Service page** — `/terms` route, covering service description, liability, acceptable use, EU jurisdiction — [#16](https://github.com/Salimov-AI/voicecall/issues/16)
-- [ ] **Create Privacy Policy page** — `/privacy` route, listing all sub-processors (ElevenLabs, Telnyx, Stripe, Supabase, Resend, OpenAI, DigitalOcean), data retention periods, GDPR rights — [#17](https://github.com/Salimov-AI/voicecall/issues/17)
-- [ ] **Collect DPAs** from each sub-processor (ElevenLabs, Telnyx, Stripe, Supabase, Resend, OpenAI, DO) — most offer standard DPAs to download and countersign — [#18](https://github.com/Salimov-AI/voicecall/issues/18)
-- [ ] **Set up Stripe account and configure billing** — no Stripe account exists yet. Create account, configure products/plans (Basic €200, Pro €400, Enterprise €999), set up test mode keys for development, register webhook endpoints, switch to live mode keys before launch — [#19](https://github.com/Salimov-AI/voicecall/issues/19)
-- [ ] **Verify email deliverability** — SPF, DKIM, DMARC records for `salimov.ai` domain — [#20](https://github.com/Salimov-AI/voicecall/issues/20)
+- [ ] **Create Terms of Service page** — `/terms` route, covering service description, liability, acceptable use, EU jurisdiction
+- [ ] **Create Privacy Policy page** — `/privacy` route, listing all sub-processors (ElevenLabs, Telnyx, Supabase, Resend, OpenAI, DigitalOcean), data retention periods, GDPR rights
+- [ ] **Collect DPAs** from each sub-processor (ElevenLabs, Telnyx, Supabase, Resend, OpenAI, DO) — most offer standard DPAs to download and countersign
+- ~~[ ] **Set up Stripe account and configure billing** — no Stripe account exists yet. Create account, configure products/plans (Basic €200, Pro €400, Enterprise €999), set up test mode keys for development, register webhook endpoints, switch to live mode keys before launch~~ *(Stripe removed)*
 - [x] **ElevenLabs plan verified** — Scale: 30 concurrent (sufficient for beta), 3,600 min/mo included + $0.10/min overage. Usage metering critical to track consumption.
 
 ### Phase 1: Production Hardening (First 2 Weeks)
 
 **Estimated effort: 5-7 days**
 
-- [ ] **Fix caller memory race** — use SQL atomic increments (`call_count = call_count + 1`) instead of read-then-write in `elevenlabs-webhooks.ts:376-425` — [#26](https://github.com/Salimov-AI/voicecall/issues/26)
-- [ ] **Fix worker/webhook race** — wrap conversation-sync dedup check in transaction, match by conversation ID not time window (`conversation-sync.ts:109-133`) — [#27](https://github.com/Salimov-AI/voicecall/issues/27)
-- [ ] **Add DB transactions** for Stripe checkout — [#28](https://github.com/Salimov-AI/voicecall/issues/28)
-- [ ] **Add timeouts** to all raw `fetch()` calls (ElevenLabs TTS at `elevenlabs.ts:808`, Telnyx SIP at `telnyx.ts:404,427,459`) — [#29](https://github.com/Salimov-AI/voicecall/issues/29)
-- [ ] **Add remaining DB indexes** (`customers.stripeCustomerId`) — ~~`agents.telnyxAssistantId`~~ already has `.unique()`, ~~`agents.elevenlabsAgentId`~~ moved to Phase 0 — [#30](https://github.com/Salimov-AI/voicecall/issues/30)
-- [ ] **Bump DB pool** from 25 to 50 for production (and set PostgreSQL `max_connections = 200`) — [#31](https://github.com/Salimov-AI/voicecall/issues/31)
-- [ ] **Add Sentry error tracking** — [#32](https://github.com/Salimov-AI/voicecall/issues/32)
-- [ ] **Add UptimeRobot monitoring** — [#33](https://github.com/Salimov-AI/voicecall/issues/33)
-- [ ] **Implement Redis caching** for customer profile and agent config lookups — [#34](https://github.com/Salimov-AI/voicecall/issues/34)
-- [ ] **Add retry logic** for ElevenLabs and Resend API calls (1-2 retries with exponential backoff) — [#35](https://github.com/Salimov-AI/voicecall/issues/35)
-- [ ] **Add API client retry** in frontend (1 retry for GET requests) — [#36](https://github.com/Salimov-AI/voicecall/issues/36)
-- [ ] **Add global error boundary** in frontend with user-friendly error messages — [#37](https://github.com/Salimov-AI/voicecall/issues/37)
-- [ ] **Use bcrypt** for registration password hashing — [#38](https://github.com/Salimov-AI/voicecall/issues/38)
-- [ ] **Add OpenGraph + Twitter Card meta tags** to `layout.tsx` (links shared on social/WhatsApp won't preview without these) — [#39](https://github.com/Salimov-AI/voicecall/issues/39)
-- [ ] **Add robots.txt + sitemap.xml** to `apps/web/public/` — [#40](https://github.com/Salimov-AI/voicecall/issues/40)
-- [ ] **Add product analytics** — Plausible (EU-hosted, no cookie consent needed) or PostHog — [#41](https://github.com/Salimov-AI/voicecall/issues/41)
-- [ ] **Add rate-limit error handling in frontend** — show toast when API returns 429 — [#42](https://github.com/Salimov-AI/voicecall/issues/42)
-- [ ] **Add payment failure in-app banner** — warn users when subscription is at risk (not just email) — [#43](https://github.com/Salimov-AI/voicecall/issues/43)
-- [ ] **Add email delivery tracking** — store Resend message ID per email sent, configure Resend webhooks (`delivered`/`bounced`/`complained`), show delivery status badge on call summaries in dashboard — [#44](https://github.com/Salimov-AI/voicecall/issues/44)
+- [ ] **Bump DB pool** from 25 to 50 for production (and set PostgreSQL `max_connections = 200`)
+- [ ] **Add Sentry error tracking**
+- [ ] **Add UptimeRobot monitoring**
+- [ ] **Add container readiness/liveness probes** — health endpoints for Docker HEALTHCHECK and potential orchestrator use; currently only `/health` checks DB, should also verify Redis connectivity
+- [ ] **SSL renewal monitoring** — make Let's Encrypt auto-renewal observable; alert if renewal fails (certbot cron + monitoring check)
+- [ ] **DB backup restore drill** — execute a full restore from DO Managed Postgres backup to a clean environment; document the steps and time-to-recovery
+- [ ] **Secret rotation runbook** — document how to rotate ENCRYPTION_KEY (requires re-encrypting stored Telnyx/OAuth tokens), ADMIN_SECRET, and all API keys without downtime
 
 ### Phase 2: Testing & CI (First Month)
 
 **Estimated effort: 5-8 days**
 
 - [ ] Set up Vitest
-- [ ] Write P0 tests (auth, webhooks, encryption, Stripe idempotency)
+- [ ] Write P0 tests (auth, webhooks, encryption)
 - [ ] Write P1 tests (agent CRUD, GDPR, rate limiting)
 - [ ] Set up GitHub Actions CI (lint + typecheck + tests on PR)
 - [ ] Add CSP headers
 - [ ] Add pagination to agent and flow listing endpoints
 - ~~[ ] Move business hours to per-agent DB config~~ **FIXED:** Now per-agent via `businessHours` JSONB column
-- [ ] Add Stripe idempotency keys to mutation operations
+- ~~[ ] Add Stripe idempotency keys to mutation operations~~ *(Stripe removed)*
 - [ ] **Load test with k6 or Artillery** — simulate 20 concurrent calls (single medium business scenario): verify appointment booking under contention, call record dedup, Redis connection stability, pre-call webhook < 1s latency. Then scale to 100 concurrent users to find the breaking point. Run against staging, not production.
 
 ### Phase 3: Scale Preparation (First Quarter)
@@ -1363,7 +1352,7 @@ Step 3: Set Environment Variables
 
 Step 4: Configure External Services
   └── Supabase: Set Site URL + Redirect URLs (see Section 15)
-  └── Stripe: Switch to live mode, set webhook endpoint to production URL
+  └── ~~Stripe: Switch to live mode, set webhook endpoint to production URL~~ (Stripe removed)
   └── Telnyx: Set webhook endpoints (pre-call + post-call)
   └── ElevenLabs: Set webhook endpoint, verify plan concurrency
   └── Resend: Verify domain auth (SPF/DKIM/DMARC for salimov.ai)
@@ -1379,7 +1368,7 @@ Step 6: Verify
   └── docker compose ps (all containers healthy)
   └── Open dashboard, login, create agent
   └── Test phone call end-to-end
-  └── Verify Stripe webhook receiving events
+  └── ~~Verify Stripe webhook receiving events~~ (Stripe removed)
   └── Verify emails arriving (check spam folder)
 
 Step 7: Monitoring
@@ -1410,14 +1399,25 @@ Retention: daily for 30 days, weekly for 1 year. Test restore monthly.
 
 ---
 
-## 17. Pre-Launch Checklist
+## 17. Hypercare Plan (First 72 Hours Post-Launch)
+
+- Continuous monitoring: error rate, latency, webhook failures, DB health, worker health
+- Log review after each deploy and after first real customer calls
+- Online rollback owner available throughout the launch window
+- Launch log: timestamp, impact, fix, and follow-up owner for every issue
+- Post-launch review at 24 hours and 72 hours
+- Designated owners for: deploy, rollback, communication, and hypercare monitoring
+
+---
+
+## 18. Pre-Launch Checklist
 
 ### Security
 - [ ] `ADMIN_SECRET` is random, min 32 chars, not in git, no fallback
 - [ ] `ENCRYPTION_KEY` is 64 hex chars, backed up securely offline
 - [ ] All `.env` files excluded from git (verify `.gitignore`)
 - [ ] All API keys rotated (fresh production keys, not demo/dev keys)
-- [ ] Stripe in live mode (not test mode)
+- ~~[ ] Stripe in live mode (not test mode)~~ *(Stripe removed)*
 - [ ] ElevenLabs webhook secret configured
 - [ ] Telnyx webhook secret configured
 - [ ] `.env.production` permissions set to `chmod 600`
@@ -1425,7 +1425,7 @@ Retention: daily for 30 days, weekly for 1 year. Test restore monthly.
 ### Features
 - [ ] New user registration -> welcome email received
 - [ ] Appointment booking -> confirmation email sent with .ics
-- [ ] Stripe payment -> subscription activated correctly
+- ~~[ ] Stripe payment -> subscription activated correctly~~ *(Stripe removed)*
 - [ ] Call completed -> transcript + sentiment saved
 - [ ] Call completed -> call summary email sent
 - [ ] iCal sync working (test with real Google Calendar / iCal URL)
@@ -1437,7 +1437,7 @@ Retention: daily for 30 days, weekly for 1 year. Test restore monthly.
 ### Data Integrity
 - [ ] Appointment double-booking fix deployed (unique constraint + transactions)
 - [ ] Call record dedup fix deployed (ON CONFLICT UPDATE)
-- [ ] Stripe webhook idempotency deployed (event.id check)
+- ~~[ ] Stripe webhook idempotency deployed (event.id check)~~ *(Stripe removed)*
 - [ ] Redis singleton connection deployed (not per-request)
 - [ ] Load test passed on staging (20 concurrent calls, no double-bookings, no duplicate records, pre-call < 1s)
 
@@ -1446,7 +1446,7 @@ Retention: daily for 30 days, weekly for 1 year. Test restore monthly.
 - [ ] All Docker containers healthy for 24 hours (`docker compose ps`)
 - [ ] Database backup runs and a backup file exists
 - [ ] Uptime monitor alerting configured and tested
-- [ ] Stripe webhook receiving and processing events
+- ~~[ ] Stripe webhook receiving and processing events~~ *(Stripe removed)*
 - [ ] Data retention worker scheduled and running (`docker compose logs worker`)
 
 ### Legal / GDPR
@@ -1454,7 +1454,7 @@ Retention: daily for 30 days, weekly for 1 year. Test restore monthly.
 - [ ] Terms of Service accessible at `/terms`
 - [ ] GDPR data export works end-to-end
 - [ ] GDPR account deletion works end-to-end
-- [ ] DPAs collected from sub-processors (ElevenLabs, Telnyx, Stripe, Supabase, Resend, OpenAI, DO)
+- [ ] DPAs collected from sub-processors (ElevenLabs, Telnyx, Supabase, Resend, OpenAI, DO)
 
 ---
 
@@ -1485,7 +1485,7 @@ Retention: daily for 30 days, weekly for 1 year. Test restore monthly.
 | ElevenLabs | TTS generation | ~100 req/min | Voice preview fails |
 | Telnyx | API calls | ~100 req/min | Phone operations fail |
 | Telnyx | Concurrent calls | Plan-dependent | Callers get busy signal |
-| Stripe | API calls | 100 req/s (standard) | Billing operations fail |
+| ~~Stripe~~ | ~~API calls~~ | ~~100 req/s (standard)~~ | ~~Billing operations fail~~ *(Stripe removed)* |
 | Resend | Emails | 100/day (free), 50K/mo (paid) | Emails silently dropped |
 | OpenAI | Chat completions | 500 req/min (GPT-4o-mini) | Support chat fails |
 
