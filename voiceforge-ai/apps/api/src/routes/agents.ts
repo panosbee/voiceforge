@@ -25,7 +25,31 @@ const log = createLogger('agents');
  * the browser calls our API directly (works with localhost, no public URL needed).
  */
 export function buildClientToolDefs(language: string) {
+  return getBaseToolDefs(language);
+}
+
+/**
+ * Build webhook tool definitions for an agent.
+ * Webhook tools are called by ElevenLabs server-to-server — works with any client
+ * (browser SDK, convai widget, phone calls). Requires public API URL.
+ */
+export function buildWebhookToolDefs(language: string, elAgentId: string, apiBaseUrl: string) {
+  const webhookUrl = (toolName: string) => `${apiBaseUrl}/webhooks/elevenlabs/tool/${elAgentId}/${toolName}`;
+  return getBaseToolDefs(language).map((t) => ({
+    name: t.name,
+    description: t.description,
+    url: webhookUrl(t.name),
+    method: 'POST',
+    parameters: t.parameters as Record<string, unknown>,
+  }));
+}
+
+/**
+ * Base tool definitions shared by both client and webhook modes.
+ */
+function getBaseToolDefs(language: string) {
   const isEn = language === 'en';
+
   return [
     {
       name: 'check_availability',
@@ -310,6 +334,50 @@ agentRoutes.get('/', async (c) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
+// POST /agents/sync-webhook-tools — Upgrade all agents to webhook tools
+// One-time admin endpoint: switches ElevenLabs tools from client → webhook
+// ═══════════════════════════════════════════════════════════════════
+
+agentRoutes.post('/sync-webhook-tools', async (c) => {
+  const user = c.get('user');
+
+  if (env.API_BASE_URL.includes('localhost')) {
+    return c.json<ApiResponse>({ success: false, error: { code: 'NOT_PRODUCTION', message: 'Webhook tools only work in production' } }, 400);
+  }
+
+  const customer = await getCustomerByUserId(user.sub);
+  if (!customer) {
+    return c.json<ApiResponse>({ success: false, error: { code: 'NOT_FOUND', message: 'Customer not found' } }, 404);
+  }
+
+  const customerAgents = await db.query.agents.findMany({
+    where: eq(agents.customerId, customer.id),
+  });
+
+  const results: Array<{ agentId: string; name: string; status: string }> = [];
+
+  for (const agent of customerAgents) {
+    if (!agent.elevenlabsAgentId || agent.elevenlabsAgentId.startsWith('dev_')) {
+      results.push({ agentId: agent.id, name: agent.name, status: 'skipped_dev' });
+      continue;
+    }
+
+    try {
+      const lang = (agent.language as string) || 'el';
+      const webhookTools = buildWebhookToolDefs(lang, agent.elevenlabsAgentId, env.API_BASE_URL);
+      await elevenlabsService.updateAgent(agent.elevenlabsAgentId, { webhookTools, clientTools: [] });
+      results.push({ agentId: agent.id, name: agent.name, status: 'synced' });
+      log.info({ agentId: agent.id, elAgentId: agent.elevenlabsAgentId }, 'Synced agent to webhook tools');
+    } catch (err) {
+      log.error({ err, agentId: agent.id }, 'Failed to sync agent tools');
+      results.push({ agentId: agent.id, name: agent.name, status: 'error' });
+    }
+  }
+
+  return c.json<ApiResponse>({ success: true, data: results });
+});
+
+// ═══════════════════════════════════════════════════════════════════
 // GET /agents/:id — Get a single agent
 // ═══════════════════════════════════════════════════════════════════
 
@@ -385,7 +453,12 @@ agentRoutes.post('/', zValidator('json', createAgentSchema), async (c) => {
       }
 
       if (body.existingElevenlabsAgentId && !body.existingElevenlabsAgentId.startsWith('dev_')) {
-        // Reuse existing preview agent — update it with full config (client tools, proper name)
+        // Reuse existing preview agent — update it with full config
+        // In production, use webhook tools; in dev, use client tools
+        const useWebhookTools = !env.API_BASE_URL.includes('localhost');
+        const webhookTools = useWebhookTools ? buildWebhookToolDefs(agentLang, body.existingElevenlabsAgentId, env.API_BASE_URL) : undefined;
+        const toolsForUpdate = useWebhookTools ? [] : clientTools;
+
         await elevenlabsService.updateAgent(body.existingElevenlabsAgentId, {
           name: `${body.name} - ${customer.businessName}`,
           instructions: enhancedInstructions,
@@ -393,7 +466,8 @@ agentRoutes.post('/', zValidator('json', createAgentSchema), async (c) => {
           voiceId,
           ttsModel: body.ttsModel,
           llmModel: body.llmModel,
-          clientTools,
+          clientTools: toolsForUpdate,
+          webhookTools,
           supportedLanguages: supportedLangs,
           forwardPhoneNumber: body.forwardPhoneNumber,
           voiceStability: body.voiceStability,
@@ -402,7 +476,7 @@ agentRoutes.post('/', zValidator('json', createAgentSchema), async (c) => {
           knowledgeBaseDocs,
         });
         elevenlabsAgentId = body.existingElevenlabsAgentId;
-        log.info({ agentId: elevenlabsAgentId }, 'Reused preview agent');
+        log.info({ agentId: elevenlabsAgentId, webhookTools: useWebhookTools }, 'Reused preview agent');
       } else {
         // Create a brand new agent
         const result = await elevenlabsService.createAgent({
@@ -422,6 +496,14 @@ agentRoutes.post('/', zValidator('json', createAgentSchema), async (c) => {
           voiceSpeed: body.voiceSpeed,
         });
         elevenlabsAgentId = result.agentId;
+
+        // In production, immediately upgrade tools from client → webhook
+        // so ElevenLabs calls our server directly (works with widget embed + phone)
+        if (!env.API_BASE_URL.includes('localhost') && elevenlabsAgentId) {
+          const webhookTools = buildWebhookToolDefs(agentLang, elevenlabsAgentId, env.API_BASE_URL);
+          await elevenlabsService.updateAgent(elevenlabsAgentId, { webhookTools, clientTools: [] });
+          log.info({ agentId: elevenlabsAgentId }, 'Upgraded agent tools to webhook mode');
+        }
       }
     } else {
       // ── DEV BYPASS: Generate fake ID, no API call ──
@@ -536,9 +618,13 @@ agentRoutes.patch('/:id', zValidator('json', updateAgentSchema), async (c) => {
       .filter(d => !!d.elevenlabsDocId)
       .map(d => ({ id: d.elevenlabsDocId!, name: d.name || d.elevenlabsDocId! }));
 
-    // Rebuild client tools with current language
+    // Rebuild tools with current language — use webhook in production
     const updateLang = body.language || (agent.language as string) || 'el';
-    const updateClientTools = buildClientToolDefs(updateLang);
+    const useWebhookTools = !env.API_BASE_URL.includes('localhost');
+    const updateClientTools = useWebhookTools ? [] : buildClientToolDefs(updateLang);
+    const updateWebhookTools = (useWebhookTools && agent.elevenlabsAgentId)
+      ? buildWebhookToolDefs(updateLang, agent.elevenlabsAgentId, env.API_BASE_URL)
+      : undefined;
 
     // Update on ElevenLabs (skip in dev bypass)
     if (!isDevBypass() && agent.elevenlabsAgentId && !agent.elevenlabsAgentId.startsWith('dev_')) {
@@ -552,6 +638,7 @@ agentRoutes.patch('/:id', zValidator('json', updateAgentSchema), async (c) => {
         llmModel: body.llmModel,
         forwardPhoneNumber: body.forwardPhoneNumber,
         clientTools: updateClientTools,
+        webhookTools: updateWebhookTools,
         supportedLanguages: updatedSupportedLangs,
         voiceStability: body.voiceStability,
         voiceSimilarity: body.voiceSimilarity,

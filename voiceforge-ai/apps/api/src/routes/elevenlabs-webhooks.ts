@@ -599,6 +599,46 @@ elevenlabsWebhookRoutes.post('/post-conversation', async (c) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
+// POST /elevenlabs/tool/:toolName — Webhook Tool Endpoint
+// ElevenLabs calls this directly for webhook-type tools (server-to-server).
+// The tool parameters are the request body. Agent ID is in the URL path.
+// This bypasses the client entirely — works with any connection method
+// (browser SDK, convai widget, phone calls).
+// ═══════════════════════════════════════════════════════════════════
+
+elevenlabsWebhookRoutes.post('/tool/:elAgentId/:toolName', async (c) => {
+  const elAgentId = c.req.param('elAgentId');
+  const toolName = c.req.param('toolName');
+  let body: Record<string, unknown> = {};
+
+  try {
+    body = await c.req.json<Record<string, unknown>>();
+  } catch {
+    // Body may be empty for parameter-less tools like get_current_datetime
+  }
+
+  log.info({ toolName, elAgentId }, 'ElevenLabs webhook tool call');
+
+  // Forward to the existing server-tool handler via internal loopback
+  try {
+    const internalResponse = await fetch(`http://127.0.0.1:${env.PORT || 3001}/webhooks/elevenlabs/server-tool`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tool_name: toolName,
+        agent_id: elAgentId,
+        parameters: body,
+      }),
+    });
+    const result = await internalResponse.json();
+    return c.json(result);
+  } catch (error) {
+    log.error({ error, toolName, elAgentId }, 'Webhook tool call internal forward failed');
+    return c.json({ error: true, message: 'Tool call failed' }, 500);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
 // POST /elevenlabs/server-tool — Server Tool Callback
 // ElevenLabs calls this when an agent invokes a server tool.
 // We route to the appropriate handler based on tool name.

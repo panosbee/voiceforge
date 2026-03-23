@@ -5,6 +5,7 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 import { eq } from 'drizzle-orm';
 import { db } from '../db/connection.js';
 import { agents, calls, webhookEvents } from '../db/schema/index.js';
@@ -15,6 +16,16 @@ import * as elevenlabsService from '../services/elevenlabs.js';
 const log = createLogger('widget');
 
 export const widgetRoutes = new Hono();
+
+// ── CORS for widget routes ───────────────────────────────────────
+// Widget endpoints are called from customer websites (cross-origin).
+// Allow any origin so embedded widgets can call tool-call, config, record.
+widgetRoutes.use('*', cors({
+  origin: '*',
+  allowMethods: ['GET', 'POST', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'Accept'],
+  maxAge: 86400,
+}));
 
 // ── GET /widget/:agentId/config ──────────────────────────────────
 // Returns widget configuration for a specific agent (public)
