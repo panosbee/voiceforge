@@ -762,8 +762,13 @@ export async function getConversation(
 ): Promise<Record<string, unknown>> {
   const client = getClient();
 
-  const response = await client.conversationalAi.conversations.get(conversationId);
-  return response as unknown as Record<string, unknown>;
+  try {
+    const response = await client.conversationalAi.conversations.get(conversationId);
+    return response as unknown as Record<string, unknown>;
+  } catch (error) {
+    log.error({ error, conversationId }, 'Failed to get conversation details');
+    throw error;
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════

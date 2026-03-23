@@ -185,14 +185,14 @@ export function AgentTestWidget({ agentId, agentName, onClose }: AgentTestWidget
     setIsRecording(true);
 
     // Wait for ElevenLabs to register the conversation
-    await new Promise((r) => setTimeout(r, 5000));
+    await new Promise((r) => setTimeout(r, 8000));
 
     let recorded = false;
     let noConversation = false;
 
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 4; attempt++) {
       try {
-        console.info(`[AgentTestWidget] Recording attempt ${attempt + 1}/3...`);
+        console.info(`[AgentTestWidget] Recording attempt ${attempt + 1}/4...`);
         const result = await api.post<ApiResponse<{ status?: string; id?: string; summary?: string; appointmentBooked?: boolean } | null>>(
           '/api/calls/record-conversation',
           { elevenlabsAgentId: agentId },
@@ -211,9 +211,9 @@ export function AgentTestWidget({ agentId, agentName, onClose }: AgentTestWidget
           }
           if (result.data.status === 'no_new_conversation') {
             noConversation = true;
-            if (attempt < 2) {
-              console.info(`[AgentTestWidget] No conversation found yet, retrying in 8s...`);
-              await new Promise((r) => setTimeout(r, 8000));
+            if (attempt < 3) {
+              console.info(`[AgentTestWidget] No conversation found yet, retrying in 10s...`);
+              await new Promise((r) => setTimeout(r, 10000));
               continue;
             }
           }
@@ -221,8 +221,8 @@ export function AgentTestWidget({ agentId, agentName, onClose }: AgentTestWidget
         break;
       } catch (err) {
         console.warn(`[AgentTestWidget] Record attempt ${attempt + 1} failed:`, err);
-        if (attempt < 2) {
-          await new Promise((r) => setTimeout(r, 8000));
+        if (attempt < 3) {
+          await new Promise((r) => setTimeout(r, 10000));
           continue;
         }
       }

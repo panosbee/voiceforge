@@ -523,32 +523,38 @@ callRoutes.post('/record-conversation', zValidator('json', recordConversationSch
 
   try {
     // ── Step 1: Find the newest unrecorded conversation ────────────
-    // Retry up to 3 times — new conversations may take seconds to appear in ElevenLabs API
+    // Retry up to 6 times with 5s delays (~30s total) — ElevenLabs can
+    // take 10-20s to register a conversation after call end.
     let conversationId: string | null = null;
+    const MAX_FIND_ATTEMPTS = 6;
 
-    for (let findAttempt = 0; findAttempt < 3; findAttempt++) {
-      const conversations = await elevenlabsService.getConversations(elevenlabsAgentId);
+    for (let findAttempt = 0; findAttempt < MAX_FIND_ATTEMPTS; findAttempt++) {
+      try {
+        const conversations = await elevenlabsService.getConversations(elevenlabsAgentId);
 
-      if (conversations && conversations.length > 0) {
-        for (const conv of conversations) {
-          const cid = ((conv as Record<string, unknown>).conversationId ?? (conv as Record<string, unknown>).conversation_id) as string | undefined;
-          if (!cid) continue;
+        if (conversations && conversations.length > 0) {
+          for (const conv of conversations) {
+            const cid = ((conv as Record<string, unknown>).conversationId ?? (conv as Record<string, unknown>).conversation_id) as string | undefined;
+            if (!cid) continue;
 
-          const existing = await db.query.webhookEvents.findFirst({
-            where: eq(webhookEvents.eventId, cid),
-          });
-          if (!existing) {
-            conversationId = cid;
-            break;
+            const existing = await db.query.webhookEvents.findFirst({
+              where: eq(webhookEvents.eventId, cid),
+            });
+            if (!existing) {
+              conversationId = cid;
+              break;
+            }
           }
         }
+      } catch (findErr) {
+        log.warn({ error: findErr, attempt: findAttempt + 1 }, 'Error listing conversations — retrying');
       }
 
       if (conversationId) break;
 
-      if (findAttempt < 2) {
+      if (findAttempt < MAX_FIND_ATTEMPTS - 1) {
         log.info({ attempt: findAttempt + 1, elevenlabsAgentId }, 'No unrecorded conversation found yet — retrying...');
-        await new Promise(r => setTimeout(r, 4000));
+        await new Promise(r => setTimeout(r, 5000));
       }
     }
 
@@ -566,9 +572,20 @@ callRoutes.post('/record-conversation', zValidator('json', recordConversationSch
     let analysis: Record<string, unknown> | undefined;
     let metadata: Record<string, unknown> | undefined;
 
-    const MAX_ANALYSIS_ATTEMPTS = 8;
+    // Poll up to 15 times with progressive backoff (total ~2 minutes)
+    // Long calls (>10min) can take 60-90s for AI analysis to complete.
+    const MAX_ANALYSIS_ATTEMPTS = 15;
     for (let analysisAttempt = 0; analysisAttempt < MAX_ANALYSIS_ATTEMPTS; analysisAttempt++) {
-      full = await elevenlabsService.getConversation(conversationId);
+      try {
+        full = await elevenlabsService.getConversation(conversationId);
+      } catch (fetchErr) {
+        log.warn({ error: fetchErr, conversationId, attempt: analysisAttempt + 1 }, '⚠️ Failed to fetch conversation — retrying');
+        if (analysisAttempt < MAX_ANALYSIS_ATTEMPTS - 1) {
+          await new Promise(r => setTimeout(r, 5000));
+          continue;
+        }
+        break;
+      }
       transcript = (full.transcript ?? []) as Array<{ role: string; message?: string; time_in_call_secs?: number; timeInCallSecs?: number }>;
       analysis = full.analysis as Record<string, unknown> | undefined;
       metadata = full.metadata as Record<string, unknown> | undefined;
@@ -583,8 +600,8 @@ callRoutes.post('/record-conversation', zValidator('json', recordConversationSch
       }
 
       if (analysisAttempt < MAX_ANALYSIS_ATTEMPTS - 1) {
-        // Exponential backoff: 3s, 4s, 5s, 6s, 7s, 8s, 9s
-        const delay = 3000 + analysisAttempt * 1000;
+        // Progressive backoff: 3s, 4s, 5s, 6s, 7s, 8s, 8s, 8s, 10s, 10s...
+        const delay = Math.min(3000 + analysisAttempt * 1000, 10000);
         log.info({ conversationId, attempt: analysisAttempt + 1, hasTranscript, hasSummary, hasDataCollection, nextDelayMs: delay }, '⏳ Waiting for AI analysis...');
         await new Promise(r => setTimeout(r, delay));
       } else {
@@ -1008,8 +1025,9 @@ callRoutes.post('/record-conversation', zValidator('json', recordConversationSch
       },
     }, 201);
   } catch (error) {
-    log.error({ error, elevenlabsAgentId }, 'Failed to record widget conversation');
-    return c.json<ApiResponse>({ success: false, error: { code: 'FETCH_FAILED', message: 'Failed to fetch conversation from ElevenLabs' } }, 500);
+    const errMsg = error instanceof Error ? error.message : String(error);
+    log.error({ error, elevenlabsAgentId, errorMessage: errMsg }, 'Failed to record widget conversation');
+    return c.json<ApiResponse>({ success: false, error: { code: 'RECORDING_FAILED', message: `Failed to record conversation: ${errMsg}` } }, 500);
   }
 });
 
