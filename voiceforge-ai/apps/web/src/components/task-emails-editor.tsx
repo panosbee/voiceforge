@@ -30,6 +30,7 @@ export function TaskEmailsEditor({ agentId }: TaskEmailsEditorProps) {
   const [emails, setEmails] = useState<TaskEmail[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
 
   // Load existing task emails
   useEffect(() => {
@@ -52,16 +53,19 @@ export function TaskEmailsEditor({ agentId }: TaskEmailsEditorProps) {
       ...prev,
       { email: '', roleLabel: '', roleDescription: '', sortOrder: prev.length },
     ]);
+    setIsDirty(true);
   };
 
   const removeEmail = (index: number) => {
     setEmails((prev) => prev.filter((_, i) => i !== index));
+    setIsDirty(true);
   };
 
   const updateEmail = (index: number, field: keyof TaskEmail, value: string) => {
     setEmails((prev) =>
       prev.map((item, i) => (i === index ? { ...item, [field]: value } : item)),
     );
+    setIsDirty(true);
   };
 
   const handleSave = async () => {
@@ -83,6 +87,7 @@ export function TaskEmailsEditor({ agentId }: TaskEmailsEditorProps) {
 
       const result = await api.put<{ data: TaskEmail[] }>(`/api/tasks/emails/${agentId}/bulk`, payload);
       setEmails(result.data || []);
+      setIsDirty(false);
       toast.success(t.tasks.saveSuccess);
     } catch {
       toast.error(t.tasks.saveError);
@@ -192,7 +197,7 @@ export function TaskEmailsEditor({ agentId }: TaskEmailsEditorProps) {
           {t.tasks.addEmail}
         </Button>
 
-        {emails.length > 0 && (
+        {isDirty && (
           <Button
             type="button"
             size="sm"
