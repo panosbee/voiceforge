@@ -49,6 +49,9 @@ COPY --from=builder /app/apps/api/dist apps/api/dist
 COPY --from=builder /app/packages/shared/dist packages/shared/dist
 COPY --from=builder /app/packages/shared/src packages/shared/src
 
+# Copy migration files for runtime migrator
+COPY docker/migrations/ docker/migrations/
+
 # Set ownership
 RUN chown -R voiceforge:voiceforge /app
 

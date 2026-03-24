@@ -23,6 +23,7 @@
     "db:generate": "pnpm --filter @voiceforge/api db:generate",
     "db:migrate": "pnpm --filter @voiceforge/api db:migrate",
     "db:push": "pnpm --filter @voiceforge/api db:push",
+    "db:migrate:run": "pnpm --filter @voiceforge/api db:migrate:run",
     "db:studio": "pnpm --filter @voiceforge/api db:studio",
     "clean": "pnpm -r exec rm -rf node_modules dist .next .turbo"
   },

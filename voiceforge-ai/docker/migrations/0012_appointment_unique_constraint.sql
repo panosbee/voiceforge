@@ -8,6 +8,9 @@ WHERE a.customer_id = b.customer_id
   AND a.scheduled_at = b.scheduled_at
   AND a.created_at < b.created_at;
 
+DO $$ BEGIN
 ALTER TABLE appointments
   ADD CONSTRAINT uq_appointments_customer_time
   UNIQUE (customer_id, scheduled_at);
+EXCEPTION WHEN duplicate_table OR duplicate_object THEN null;
+END $$;
