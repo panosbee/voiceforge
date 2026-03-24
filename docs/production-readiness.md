@@ -10,6 +10,17 @@
 
 Bugfixes and code-level issues (race conditions, idempotency, atomicity, missing indexes/constraints) have been moved to GitHub Issues and are tracked on the project board. This report now focuses exclusively on **DevOps, infrastructure, and operational readiness**. Sections 2.x (Critical Issues) and related roadmap items are retained for architectural context but are no longer the actionable checklist — the issue tracker is.
 
+### Infrastructure Decisions (2026-03-24)
+
+Key decisions from DevOps planning session:
+- **Blue-green deploys moved to Phase 0** — Nginx on-box + dual Docker Compose stacks (no DO Load Balancer at beta scale)
+- **Secrets management decided** — GitHub Actions secrets + `.env` on server (`chmod 600`); Vault/Doppler deferred
+- **Staging** — repurpose existing POC droplet with self-hosted Postgres in Docker (no managed DB)
+- **Container registry** — GHCR (free for GitHub org, native Actions integration)
+- **Production domain** — new `<domain>` setup added to Phase 0 (demo domain is `voiceforge.salimov.ai`)
+- **CI exists** — `.github/workflows/ci.yml` covers lint/typecheck/test/build/Docker; CD pipeline remaining
+- **Phase 0 roadmap split into parallel tracks** — DevOps, Developer, and Legal tracks run simultaneously (1-2 week target with 2 beta customers)
+
 **Consolidated from:** `voiceforge-ai/PRODUCTION_READINESS_PLAN.md` (Greek-language process/governance doc) has been absorbed into this file. This is now the single source of truth for production readiness.
 
 **Stripe removal:** The Stripe billing integration is legacy code from a previous implementation. This project will not use Stripe. All Stripe-related sections, tasks, and references are struck through. The `stripe` dependency, `services/stripe.ts`, `routes/billing.ts`, related DB columns (`stripeCustomerId`, `stripeSubscriptionId`), shared types (`types/billing.ts`), and env vars (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_*_PRICE_ID`) should be removed from the codebase in a future cleanup pass.
@@ -907,11 +918,11 @@ Already configured:
 
 | Issue | Detail |
 |-------|--------|
-| **No CI/CD** | No GitHub Actions, no automated tests/lint before deploy. See recommended pipeline below. |
+| **CI exists, CD missing** | CI workflow (`.github/workflows/ci.yml`) runs lint, typecheck, test, build, Docker image verification on PRs to `staging`/`production`. CD pipeline (auto-deploy, smoke tests, promotion) not yet built. |
 | **No rollback strategy** | Failed deploy requires manual recovery |
-| **No blue-green** | Zero-downtime deploys not possible |
+| **No blue-green** | Zero-downtime deploys not possible — **Phase 0 priority** (Nginx + dual Docker Compose stacks on single droplet, see Blue-Green subsection below) |
 | **`drizzle-kit push` in production** | Schema changes applied directly, no staging validation |
-| **No secrets management** | All secrets in `.env` file on server |
+| **Secrets management decided** | GitHub Actions secrets for CI/CD + `.env` files on server (`chmod 600`). Vault/Doppler deferred until team grows or compliance requires it. |
 | **No centralized logging** | Logs in Docker volumes only |
 | **No database backups** | Data loss = game over |
 | **PM2 in Docker Compose** | PM2 inside Docker is redundant (Docker handles restarts). PM2 cluster mode is useful for multi-core, but `docker compose` replicas would be cleaner |
@@ -955,21 +966,63 @@ All app configuration must branch on `NODE_ENV` (`development` / `staging` / `pr
 
 The `.env` file at the monorepo root determines which environment runs. Symlinks from `apps/api/.env` and `apps/web/.env` point to it (same pattern as current dev setup). Never commit `.env` files — only `.env.example`.
 
+### Blue-Green Deployment Strategy (Phase 0)
+
+**Decision:** Nginx reverse proxy on the box + two Docker Compose stacks (blue/green as container sets on a single production droplet). No DO Load Balancer needed at this stage.
+
+**Why this approach:**
+- At 2 beta customers on a single droplet, a DO Load Balancer ($12/mo) adds cost without benefit — Nginx on-box does the same job
+- Docker images stay the same when scaling later to DO Load Balancer + multiple droplets or DOKS
+- Zero-downtime deploys from day 1
+
+**How it works:**
+
+```
+1. "Blue" stack running (current production)
+     Nginx upstream -> blue containers (api:3001, web:3000)
+
+2. Deploy: start "Green" stack alongside Blue
+     docker compose -f docker-compose.yml -f docker-compose.production.yml \
+       -p voiceforge-green up -d
+
+3. Health-check Green
+     curl -f http://localhost:3011/api/health  (green API on offset port)
+
+4. Swap Nginx upstream -> green containers
+     cp nginx/green.conf nginx/active.conf && nginx -s reload
+
+5. Tear down Blue
+     docker compose -p voiceforge-blue down
+
+6. Green becomes the new Blue for next deploy
+```
+
+**Implementation:**
+- Two Compose project names: `voiceforge-blue` and `voiceforge-green`
+- Port offset for green stack (e.g., API 3011, web 3010) so both can run simultaneously
+- Deploy script (`scripts/deploy-blue-green.sh`): determines which color is active, starts the other, health-checks, swaps Nginx, tears down old
+- Nginx config uses an `upstream` block that the deploy script rewrites
+- Rollback: if green health check fails, tear down green, blue stays untouched
+
+**Scale path:** When traffic exceeds single-droplet capacity, replace on-box Nginx with DO Load Balancer ($12/mo) distributing across multiple droplets. The Docker images and health check pattern remain identical.
+
 ### Recommended CI/CD Pipeline
 
-**On PR to `main` (GitHub Actions):**
-1. `pnpm lint` + `pnpm typecheck` + `pnpm build` + `pnpm test` (when Vitest is set up)
-2. Branch protection: can't merge if any step fails
+**CI (done — `.github/workflows/ci.yml`):**
+Runs on PRs to `staging` and `production` branches: `pnpm install --frozen-lockfile` → lint → typecheck → test → build → Docker image build verification (api + web). Branch protection requires all checks to pass before merge.
 
-**On merge to `main` (auto-deploy to staging):**
-1. CI builds Docker images for `api`, `web`, `worker`, tags with commit SHA, pushes to container registry
-2. SSH into staging droplet, pull images from registry, `docker compose -f docker-compose.yml -f docker-compose.staging.yml up -d` (no `--build` on server)
+**CD (remaining work):**
+
+**On merge to `staging` (auto-deploy to staging):**
+1. CI builds Docker images for `api`, `web`, `worker`, tags with commit SHA + `latest`, pushes to GHCR
+2. SSH into staging droplet, pull images from GHCR, `docker compose -f docker-compose.yml -f docker-compose.staging.yml up -d` (no `--build` on server)
 3. Run smoke tests from CI against staging URL (health check, auth, basic CRUD) — these are CI steps, not in Docker Compose
-4. Manual approval gate (GitHub environment protection rule) to promote to production
 
-**On approval (auto-deploy to production):**
-1. SSH into production droplet, pull the same images that passed staging, `docker compose -f docker-compose.yml -f docker-compose.production.yml up -d`
-2. Same entrypoint: install → migrate → start
+**On merge to `production` (auto-deploy to production with blue-green):**
+1. Manual approval gate (GitHub environment protection rule)
+2. SSH into production droplet, pull the same images that passed staging from GHCR
+3. Run blue-green deploy script (`scripts/deploy-blue-green.sh`) — starts green stack, health-checks, swaps Nginx upstream, tears down old stack
+4. Post-deploy smoke test from CI
 
 **API container entrypoint script (`docker/entrypoint.sh`):**
 ```bash
@@ -980,34 +1033,42 @@ pnpm db:migrate
 exec pnpm start
 ```
 
-**Staging environment:**
-- Separate DO droplet (4 GB / 2 vCPU is enough)
-- Separate `.env.staging`: Telnyx dev account, ElevenLabs free-tier key, separate Supabase project
-- Separate subdomain (e.g., `staging.voiceforge.salimov.ai`)
-- DB seed script (run once on initial setup, re-run manually to reset): creates realistic data — customers, agents, call history with transcripts/sentiment, appointments, caller memories
-- On deploy, only run migrations — don't re-seed. Staging should accumulate real-looking state to catch migration bugs against existing data.
+**Container registry:** GHCR (GitHub Container Registry) — free for private repos in GitHub org, native integration with GitHub Actions. Image tagging: `ghcr.io/<org>/voiceforge-api:sha-<commit>` + `ghcr.io/<org>/voiceforge-api:latest`.
 
-**GitHub secrets needed:** `DROPLET_IP`, `STAGING_IP`, `DEPLOY_USER`, `DEPLOY_KEY`. Enable branch protection on `main` requiring CI to pass.
+**Staging environment:**
+- Repurpose existing POC droplet (4 GB / 2 vCPU) — no new droplet needed
+- Self-hosted Postgres in Docker alongside the app (no managed DB cost for staging)
+- Separate `.env.staging`: Telnyx dev account, ElevenLabs free-tier key, separate Supabase project
+- Separate subdomain (e.g., `staging.<domain>`)
+- DB seed script (run once on initial setup, re-run manually to reset): creates realistic data — customers, agents, call history with transcripts/sentiment, appointments, caller memories
+- On deploy, only run migrations — don't re-seed. Staging should accumulate real-looking state to catch migration bugs against existing data
+- Staging backups are not required — disposable environment, can be rebuilt from seed
+
+**GitHub secrets needed:** `PRODUCTION_IP`, `STAGING_IP`, `DEPLOY_USER`, `DEPLOY_KEY`, `GHCR_TOKEN` (or use `GITHUB_TOKEN` default). Enable branch protection on `staging` and `production` requiring CI to pass.
 
 ### Recommended Infrastructure: Phase A (Beta Launch, 1-10 Customers)
 
-Keep the current droplet, offload PostgreSQL to a managed service.
+**Production:** New DO droplet + DO Managed Postgres. **Staging:** Repurpose existing POC droplet with self-hosted Postgres in Docker.
 
-| Component | Change | Cost |
-|-----------|--------|------|
-| **Droplet** | Keep current Basic 4 GB / 2 vCPU | ~$24/mo |
-| **DO Daily Backups** | Enable automatic daily droplet backups (30% of droplet price) | ~$7/mo |
-| **DO Managed Postgres** | 1 GB single node — auto daily backups, point-in-time recovery, SSL enforced | $15/mo |
-| **Total** | | **~$46/mo** |
+| Component | Environment | Change | Cost |
+|-----------|-------------|--------|------|
+| **Production Droplet** | Production | New Basic 4 GB / 2 vCPU (or 8 GB if pre-call latency is an issue) | ~$24-48/mo |
+| **DO Daily Backups** | Production | Enable automatic daily droplet backups (30% of droplet price) | ~$7-14/mo |
+| **DO Managed Postgres** | Production | 1 GB single node — auto daily backups, point-in-time recovery, SSL enforced | $15/mo |
+| **Staging Droplet** | Staging | Repurpose existing POC droplet (4 GB / 2 vCPU) — already provisioned | $0 (existing) |
+| **Staging Postgres** | Staging | Self-hosted in Docker alongside app — no managed DB needed | $0 |
+| **GHCR** | Both | GitHub Container Registry — free for private repos in GitHub org | $0 |
+| **Total** | | | **~$46-77/mo** |
 
 **Why this works:**
-- Removing PostgreSQL from Docker frees ~1.5 GB RAM and 0.5 CPU
+- Removing PostgreSQL from production Docker frees ~1.5 GB RAM and 0.5 CPU
 - Remaining containers use ~1.85 GB (API 512 MB + Next.js 512 MB + Redis 512 MB + Worker 256 MB + Nginx 50 MB), leaving ~2.15 GB for OS + Docker — comfortable for beta
 - Managed Postgres gives you automatic daily backups and point-in-time recovery with no cron setup
 - Daily droplet backups protect Nginx config, Docker Compose, `.env`, and Redis data
+- Staging uses self-hosted Postgres (no managed DB cost) — it's a disposable environment that can be rebuilt from seed
 - If pre-call webhook latency exceeds 1s under load (the hard deadline), upgrade to 8 GB / 4 vCPU (~$48/mo) — no data loss, just a brief restart
 
-**Migration steps:**
+**Production DB migration steps:**
 1. Provision DO Managed Postgres (FRA1, same datacenter as droplet for low latency)
 2. `pg_dump` existing Docker Postgres -> `psql` into managed instance
 3. Update `DATABASE_URL` in `.env.production` to point to managed Postgres
@@ -1204,28 +1265,53 @@ For a production service, you need documented procedures for:
 ### Phase 0: Emergency Fixes (Before Any Production Traffic)
 
 **Estimated effort: 7-9 days (code) + 2-3 days (infrastructure) + 1-2 days (legal/business)**
+**Target: 1-2 weeks. The DevOps and Developer tracks run in parallel.**
 
-**Infrastructure (see Section 11 for details):**
-- [ ] **Provision DO Managed Postgres** ($15/mo), migrate data with `pg_dump`/`psql`, remove Postgres from Docker Compose, update `DATABASE_URL`
-- [ ] **Enable DO daily backups** on droplet (~$7/mo)
+#### DevOps Track (Infrastructure Engineer)
+
+Server & network:
+- [ ] **Provision new production DO droplet** — Basic 4 GB / 2 vCPU (or 8 GB if pre-call latency is an issue), FRA1 datacenter
+- [ ] **Provision DO Managed Postgres** ($15/mo) for production, migrate data with `pg_dump`/`psql`, remove Postgres from `docker-compose.production.yml`, update `DATABASE_URL`
+- [ ] **Enable DO daily backups** on production droplet (~$7/mo)
 - [ ] **Harden SSH** — disable password auth, install fail2ban, enable unattended-upgrades
-- [ ] **Clean up old co-hosted app** — remove stale containers, volumes, Nginx configs
 - [ ] **Verify DO Cloud Firewall** — only ports 22, 80, 443 inbound
 - [ ] **Set `.env.production` permissions** to `chmod 600`
+- [ ] **Set up production domain** (`<domain>`) — A records pointing to production droplet, Nginx server blocks, Let's Encrypt SSL via Certbot, email DNS (SPF/DKIM/DMARC) for Resend deliverability. Current `voiceforge.salimov.ai` is demo domain only.
+
+Staging:
+- [ ] **Set up staging environment** — repurpose existing POC droplet (4 GB / 2 vCPU), self-hosted Postgres in Docker (no managed DB), separate `.env.staging` (Telnyx dev account, ElevenLabs free-tier, separate Supabase project), staging subdomain (e.g. `staging.<domain>`), DB seed script for realistic test data
+- [ ] **Clean up old co-hosted app** on POC droplet — remove stale containers, volumes, Nginx configs before repurposing for staging
+
+Deployment pipeline:
+- [x] **CI pipeline done** — `.github/workflows/ci.yml` runs lint, typecheck, test, build, Docker image verification on PRs to `staging`/`production`
+- [ ] **Set up GHCR container registry** — configure GitHub Actions to build + push `api`, `web`, `worker` images tagged `sha-<commit>` + `latest` to `ghcr.io/<org>/`
+- [ ] **Build CD pipeline** — auto-deploy to staging on merge to `staging` branch, manual approval gate for production promotion, smoke tests post-deploy
+- [ ] **Set up blue-green deployment** — Nginx reverse proxy + dual Docker Compose stacks (blue/green container sets on single droplet), deploy script (`scripts/deploy-blue-green.sh`) with health check and upstream swap (see Blue-Green subsection in Section 11)
 - [ ] **Set up Docker Compose environment overrides** — create `docker-compose.yml` (base), `docker-compose.dev.yml`, `docker-compose.staging.yml`, `docker-compose.production.yml` with environment-specific resource limits and configs (see Section 11)
-- [ ] **Set up staging environment** — separate DO droplet (4 GB / 2 vCPU), separate `.env.staging` (Telnyx dev account, ElevenLabs free-tier, separate Supabase project), staging subdomain (e.g. `staging.voiceforge.salimov.ai`), DB seed script for realistic test data
-- [ ] **Verify email deliverability** — SPF, DKIM, DMARC records for `salimov.ai` domain
-- [ ] **Replace `drizzle-kit push` with versioned migrations** — stop using schema push in production; switch to reviewed, versioned migration files with rollback capability. Deploy via dedicated migration job, not from app container at startup
-- [ ] **Set up CI/CD pipeline** — GitHub Actions: `pnpm install --frozen-lockfile` → typecheck → lint → build → tests → Docker image build → staging deploy → smoke tests. Branch protection on `main` requiring CI to pass. No production deploy without green pipeline
+- [x] **Secrets management decided** — GitHub Actions secrets for CI/CD + `.env` files on server (`chmod 600`). Vault/Doppler deferred until team grows or compliance requires it.
+
+Validation:
 - [ ] **Verify reproducible Linux build** — web build (Next.js standalone) not yet confirmed on Linux; must pass cleanly in Docker/CI Linux builder before any production deploy
+- [ ] **Telnyx end-to-end test** — Telnyx account approved and numbers acquired but integration is untested. Test full inbound call flow on staging: Telnyx SIP → ElevenLabs agent → tool call webhooks → post-call webhooks → DB records. Verify pre-call webhook responds < 1 second.
+- [ ] **Verify email deliverability** — SPF, DKIM, DMARC records for production domain (reconfigure Resend from demo domain to `<domain>`)
+
+#### Developer Track (Code Fixes)
+
+Code-level issues (race conditions, idempotency, atomicity, missing indexes/constraints) are tracked as GitHub Issues on the project board. Key items for launch:
+- [ ] **Redis singleton connection** — fix connection-per-request anti-pattern (Section 2.1)
+- [ ] **Appointment booking race condition** — unique constraint + transactions on all 3 booking paths (Section 2.7)
+- [ ] **Call record dedup** — ON CONFLICT UPDATE in handlers, transaction wrapping (Section 2.6)
+- [ ] **Admin secret hardcoded fallback** — remove fallback, require env var (Section 2.5)
+- [ ] **Replace `drizzle-kit push` with versioned migrations** — stop using schema push in production; switch to reviewed, versioned migration files with rollback capability. Deploy via dedicated migration job, not from app container at startup
 - [ ] **Unify environment contract** — resolve inconsistencies in env var names between `.env.production.template`, runtime code, and deployment docs. One authoritative env spec so a new operator can set up without guesswork. Includes deciding API topology (same-domain path-based `https://app.domain.com/api` vs subdomain `https://api.domain.com`) and aligning `API_BASE_URL`, `FRONTEND_URL`, `NEXT_PUBLIC_API_URL`, Nginx `server_name`, and webhook callback URLs accordingly
-- [ ] **Set up container registry and image pipeline** — choose a registry (GHCR, DO Container Registry, or Docker Hub), define image tagging strategy (e.g. `sha-<commit>` + `latest`), build immutable images for `api`, `web`, and `worker` in CI, push to registry. Production deploys pull pre-built images instead of building on the server
 - [ ] **Fix lint gate** — `pnpm lint` fails because the shared package exposes a lint script without a complete ESLint config/dependency. Standardize ESLint at workspace level so `pnpm lint` passes locally and in CI
 
-**Legal & Business (see Section 13 for details):**
+#### Legal & Business Track (Shared)
+
 - [ ] **Create Terms of Service page** — `/terms` route, covering service description, liability, acceptable use, EU jurisdiction
 - [ ] **Create Privacy Policy page** — `/privacy` route, listing all sub-processors (ElevenLabs, Telnyx, Supabase, Resend, OpenAI, DigitalOcean), data retention periods, GDPR rights
 - [ ] **Collect DPAs** from each sub-processor (ElevenLabs, Telnyx, Supabase, Resend, OpenAI, DO) — most offer standard DPAs to download and countersign
+- [ ] **Supabase production config** — verify all items in Section 15 checklist (Site URL, redirect URLs, SMTP, JWT secret)
 - ~~[ ] **Set up Stripe account and configure billing** — no Stripe account exists yet. Create account, configure products/plans (Basic €200, Pro €400, Enterprise €999), set up test mode keys for development, register webhook endpoints, switch to live mode keys before launch~~ *(Stripe removed)*
 - [x] **ElevenLabs plan verified** — Scale: 30 concurrent (sufficient for beta), 3,600 min/mo included + $0.10/min overage. Usage metering critical to track consumption.
 
@@ -1248,7 +1334,7 @@ For a production service, you need documented procedures for:
 - [ ] Set up Vitest
 - [ ] Write P0 tests (auth, webhooks, encryption)
 - [ ] Write P1 tests (agent CRUD, GDPR, rate limiting)
-- [ ] Set up GitHub Actions CI (lint + typecheck + tests on PR)
+- [x] ~~Set up GitHub Actions CI (lint + typecheck + tests on PR)~~ **Done:** `.github/workflows/ci.yml` covers lint, typecheck, test, build, Docker image verification
 - [ ] Add CSP headers
 - [ ] Add pagination to agent and flow listing endpoints
 - ~~[ ] Move business hours to per-agent DB config~~ **FIXED:** Now per-agent via `businessHours` JSONB column
@@ -1271,8 +1357,8 @@ For a production service, you need documented procedures for:
 - [ ] Set up centralized log aggregation
 - [ ] Implement background job queue (BullMQ) to replace setInterval worker
 - [ ] Database migration safety (staging env, dry-run)
-- [ ] Blue-green deployment strategy
-- [ ] Secrets management (Vault, Doppler, or cloud-native)
+- ~~[ ] Blue-green deployment strategy~~ **Moved to Phase 0** (Nginx + dual Docker Compose stacks)
+- ~~[ ] Secrets management (Vault, Doppler, or cloud-native)~~ **Decided in Phase 0:** GitHub Actions secrets + `.env` on server. Vault/Doppler deferred until team grows or compliance requires it.
 
 **Operational:**
 - [ ] Write operational runbooks (incident response, DB restore, secret rotation, deploy rollback)
