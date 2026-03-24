@@ -591,6 +591,81 @@ async function recordMissedConversation(
     log.warn({ callId: callRecord.id }, 'Appointment detected but no date extracted — skipping creation (sync worker)');
   }
 
+  // ── Create Task for Appointment (pending → confirmed via email) ──
+  if (appointmentBooked && appointmentDate && callRecord) {
+    try {
+      const existingTaskForCall = await db.query.tasks.findFirst({
+        where: eq(tasks.callId, callRecord.id),
+      });
+
+      if (!existingTaskForCall) {
+        const aptRecipients = await db.query.agentTaskEmails.findMany({
+          where: eq(agentTaskEmails.agentId, agent.id),
+          orderBy: [agentTaskEmails.sortOrder],
+        });
+
+        if (aptRecipients.length > 0) {
+          const recipient = aptRecipients[0]!;
+          const taskId = crypto.randomUUID();
+          const confirmToken = generateConfirmToken(taskId);
+          const isEn = agent.customer.locale?.startsWith('en');
+          const callerLabel = appointmentCallerName ?? callRecord.callerNumber ?? (isEn ? 'Client' : 'Πελάτης');
+
+          const taskTitle = isEn
+            ? `Appointment: ${callerLabel} — ${appointmentDate} ${appointmentTime}`.trim()
+            : `Ραντεβού: ${callerLabel} — ${appointmentDate} ${appointmentTime}`.trim();
+          const taskAction = isEn
+            ? 'Confirm the appointment has been completed'
+            : 'Επιβεβαιώστε ότι το ραντεβού ολοκληρώθηκε';
+
+          await db.insert(tasks).values({
+            id: taskId,
+            customerId: agent.customerId,
+            agentId: agent.id,
+            callId: callRecord.id,
+            taskEmailId: recipient.id,
+            title: taskTitle,
+            description: appointmentReason ?? summary ?? null,
+            actionRequired: taskAction,
+            assignedEmail: recipient.email,
+            assignedRole: recipient.roleLabel,
+            status: 'pending',
+            priority: 'normal',
+            confirmToken,
+            callerName: appointmentCallerName ?? null,
+            callerPhone: appointmentCallerPhone ?? callRecord.callerNumber ?? null,
+            callerEmail: null,
+          });
+
+          log.info({ taskId, callId: callRecord.id, title: taskTitle }, '✅ Appointment task created (sync worker)');
+
+          if (isEmailConfigured()) {
+            const confirmUrl = `${env.API_BASE_URL}/api/tasks/confirm/${taskId}?token=${confirmToken}`;
+            await sendTaskNotificationEmail({
+              to: recipient.email,
+              taskTitle,
+              taskDescription: appointmentReason ?? summary ?? '',
+              actionRequired: taskAction,
+              priority: 'normal',
+              callerName: appointmentCallerName ?? null,
+              callerPhone: appointmentCallerPhone ?? callRecord.callerNumber ?? null,
+              callerEmail: null,
+              agentName: agent.name,
+              confirmUrl,
+              transcript: transcriptText ?? null,
+              locale: agent.customer.locale,
+            });
+            log.info({ taskId, email: recipient.email }, '📧 Appointment task email sent (sync worker)');
+          }
+        }
+      } else {
+        log.info({ callId: callRecord.id, existingTaskId: existingTaskForCall.id }, 'Task already exists — skipping appointment task (sync worker)');
+      }
+    } catch (aptTaskErr) {
+      log.error({ error: aptTaskErr, callId: callRecord.id }, 'Failed to create appointment task (sync worker) — non-blocking');
+    }
+  }
+
   // ── Episodic Memory — Update Caller Memory ──────────────────
   const callerNumber = callRecord.callerNumber;
   if (callerNumber && callerNumber !== 'unknown') {
