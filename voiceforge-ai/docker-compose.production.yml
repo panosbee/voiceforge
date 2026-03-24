@@ -68,6 +68,32 @@ services:
         max-size: '5m'
         max-file: '3'
 
+  # ── Database Migrations (runs once before API) ────────────────
+  migrate:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: voiceforge-migrate
+    command: ['node', 'dist/db/migrate.js']
+    env_file:
+      - .env.production
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-voiceforge}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-voiceforge}?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+    logging:
+      driver: json-file
+      options:
+        max-size: '5m'
+        max-file: '1'
+
   # ── API Server (Hono + Node.js) ───────────────────────────────
   api:
     build:
@@ -85,8 +111,8 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-voiceforge}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-voiceforge}?sslmode=disable
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     healthcheck:
@@ -188,8 +214,8 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-voiceforge}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-voiceforge}?sslmode=disable
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     deploy:

@@ -1,0 +1,17 @@
+0001_initial_schema.sql
+0002_add_user_role.sql
+0003_add_caller_memories.sql
+0003_add_license_keys.sql
+0003_add_voice_settings.sql
+0003_rename_plan_enum.sql
+0003_add_ical_integration.sql
+0004_add_supported_languages.sql
+0004_add_widget_config.sql
+0005_add_customer_records.sql
+0006_add_business_hours.sql
+0007_add_gdpr_consent.sql
+0008_voice_consistency_fix.sql
+0009_post_call_tasks.sql
+0010_add_caller_email.sql
+0011_add_business_hours_text.sql
+0012_appointment_unique_constraint.sql

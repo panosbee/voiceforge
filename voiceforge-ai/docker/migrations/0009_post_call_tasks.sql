@@ -4,8 +4,14 @@
 -- ═══════════════════════════════════════════════════════════════════
 
 -- Enums
+DO $$ BEGIN
 CREATE TYPE task_status AS ENUM ('pending', 'confirmed', 'expired');
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+DO $$ BEGIN
 CREATE TYPE task_priority AS ENUM ('low', 'normal', 'high', 'urgent');
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
 
 -- Agent Task Email Recipients
 -- Each agent has multiple notification emails with role labels
@@ -20,7 +26,7 @@ CREATE TABLE IF NOT EXISTS agent_task_emails (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_agent_task_emails_agent_id ON agent_task_emails(agent_id);
+CREATE INDEX IF NOT EXISTS idx_agent_task_emails_agent_id ON agent_task_emails(agent_id);
 
 -- Post-Call Tasks
 -- AI-extracted tasks from call transcripts, tracked with email confirmation
@@ -61,9 +67,9 @@ CREATE TABLE IF NOT EXISTS tasks (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_tasks_customer_id ON tasks(customer_id);
-CREATE INDEX idx_tasks_agent_id ON tasks(agent_id);
-CREATE INDEX idx_tasks_call_id ON tasks(call_id);
-CREATE INDEX idx_tasks_status ON tasks(status);
-CREATE INDEX idx_tasks_confirm_token ON tasks(confirm_token);
-CREATE INDEX idx_tasks_created_at ON tasks(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tasks_customer_id ON tasks(customer_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_agent_id ON tasks(agent_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_call_id ON tasks(call_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+CREATE INDEX IF NOT EXISTS idx_tasks_confirm_token ON tasks(confirm_token);
+CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at DESC);
