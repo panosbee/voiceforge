@@ -6,9 +6,9 @@
 **Assessed by:** Senior Engineer Audit (full-stack + DevOps)
 **Re-audit commit:** `554954b` (merged changes from project owner)
 
-### Scope Change (2026-03-23)
+### Scope Change (2026-03-23, updated 2026-03-24)
 
-Bugfixes and code-level issues (race conditions, idempotency, atomicity, missing indexes/constraints) have been moved to GitHub Issues and are tracked on the project board. This report now focuses exclusively on **DevOps, infrastructure, and operational readiness**. Sections 2.x (Critical Issues) and related roadmap items are retained for architectural context but are no longer the actionable checklist — the issue tracker is.
+Code-level issues (race conditions, idempotency, atomicity, missing indexes/constraints, frontend bugs, caching, resilience patterns, test coverage) have been **removed** from this document. They are tracked as GitHub Issues on the project board. This report now covers exclusively **DevOps, infrastructure, deployment, and operational readiness**.
 
 ### Infrastructure Decisions (2026-03-24)
 
@@ -29,64 +29,27 @@ Key decisions from DevOps planning session:
 
 ## Executive Summary
 
-VoiceForge AI has strong security fundamentals and a clean monorepo architecture. The core design is sound — ElevenLabs handles all voice AI processing while our API handles data and tool calls. However, there are **critical data integrity gaps** under concurrent load: appointment double-bookings when multiple callers request the same slot, duplicate call records from the dual webhook system (Telnyx + ElevenLabs both fire for the same call), and a Redis anti-pattern that creates a new connection per request. The codebase is well-organized and the fixes are surgical — this is a concurrency hardening exercise, not a rewrite.
+VoiceForge AI has strong security fundamentals and a clean monorepo architecture. ElevenLabs handles all voice AI processing while our API handles data and tool calls. Code-level issues (data integrity, concurrency, test coverage) are tracked in GitHub Issues.
 
-**Verdict:** Safe for a closed beta (< 10 customers, supervised). Not safe for unsupervised production traffic. A single medium-sized customer with 20 concurrent calls will trigger the double-booking and duplicate record bugs.
-
-**Infrastructure:** Currently hosted on a DO Basic 4 GB / 2 vCPU droplet (~$24/mo) with no database backups. Keep the droplet, offload Postgres to DO Managed Postgres + enable daily backups (~$46/mo total) for beta launch. Upgrade to 8 GB / 4 vCPU only if pre-call webhook latency is an issue under load.
-
-### Re-Audit Summary (2026-03-19)
-
-Merged changes from project owner (commits `4fb04dc`..`554954b`). Re-verified all findings.
-
-**Items FIXED since original audit:**
-- Email service fully implemented — welcome, call summary, payment failure, license key, appointment invite emails all working with Resend API calls (not stubs)
-- Email FROM address configurable via `EMAIL_FROM` env var
-- Business hours now per-agent via `businessHours` JSONB column + `parseBusinessHours()` service
-- `calls.telnyxConversationId` now has `.unique()` constraint (prevents raw duplicates)
-- `agents.telnyxAssistantId` now has `.unique()` constraint (acts as index)
-- `appointments(customerId, scheduledAt)` now has composite index `idx_appointments_scheduled`
-- Calls list endpoint now paginated (20/page default, max 100)
-- Telnyx SIP IP whitelist no longer in codebase (was incorrectly reported)
-
-**Items STILL PRESENT (no change):**
-- Redis connection-per-request anti-pattern (2.1)
-- ~~Stripe webhook idempotency missing (2.2)~~ *(Stripe removed — not applicable)*
-- Phone number purchase not atomic (2.3)
-- Appointment booking race condition — no unique constraint, no transactions (2.4)
-- Admin secret hardcoded with fallback (2.5)
-- Caller memory race condition (2.8)
-- Worker/webhook race condition — no transactions (2.6 remaining)
-- No usage metering — revenue leak (2.9, NEW)
-- Admin routes have no rate limiting (pre-configured limiter exists but not attached)
-- GDPR routes have no rate limiting (pre-configured limiter exists but not attached)
-- No CSP headers (secureHeaders sets other headers but not CSP)
-- SHA-256 for password hashing (code has TODO comment: "use bcrypt or argon2")
-- No error tracking (Sentry), no usage metering, no agents pagination
-- Zero test coverage
+**Infrastructure verdict:** Safe for a closed beta (< 10 customers, supervised) once infrastructure is provisioned. Production droplet + DO Managed Postgres + daily backups (~$46-77/mo total) for beta launch. Upgrade to 8 GB / 4 vCPU only if pre-call webhook latency is an issue under load.
 
 ---
 
 ## Table of Contents
 
 1. [Architecture Overview](#1-architecture-overview)
-2. [Critical Issues (Fix Before Any Production Traffic)](#2-critical-issues)
-3. [Capacity Estimation: 10 / 100 / 1,000 Users](#3-capacity-estimation)
-4. [Database Layer](#4-database-layer)
-5. [External Service Integrations](#5-external-service-integrations)
-6. [Caching Strategy (Missing)](#6-caching-strategy)
-7. [Security Posture](#7-security-posture)
-8. [Resilience & Error Handling](#8-resilience--error-handling)
-9. [Frontend Architecture](#9-frontend-architecture)
-10. [Observability & Monitoring](#10-observability--monitoring)
-11. [Deployment & Infrastructure](#11-deployment--infrastructure)
-12. [Test Coverage](#12-test-coverage)
-13. [Business & Operational Readiness](#13-business--operational-readiness)
-14. [Priority Roadmap](#14-priority-roadmap)
-15. [Supabase Configuration Checklist](#15-supabase-configuration-checklist)
-16. [Deployment Runbook (First Production Deploy)](#16-deployment-runbook)
-17. [Hypercare Plan (First 72 Hours Post-Launch)](#17-hypercare-plan)
-18. [Pre-Launch Checklist](#18-pre-launch-checklist)
+2. [Capacity Estimation: 10 / 100 / 1,000 Users](#2-capacity-estimation)
+3. [Security Posture](#3-security-posture)
+4. [Observability & Monitoring](#4-observability--monitoring)
+5. [Deployment & Infrastructure](#5-deployment--infrastructure)
+6. [Business & Operational Readiness](#6-business--operational-readiness)
+7. [Priority Roadmap](#7-priority-roadmap)
+8. [Supabase Configuration Checklist](#8-supabase-configuration-checklist)
+9. [Deployment Runbook (First Production Deploy)](#9-deployment-runbook)
+10. [Hypercare Plan (First 72 Hours Post-Launch)](#10-hypercare-plan)
+11. [Pre-Launch Checklist](#11-pre-launch-checklist)
+- [Appendix A: Database Schema Quick Reference](#appendix-a-database-schema-quick-reference)
+- [Appendix B: External Service Rate Limits Reference](#appendix-b-external-service-rate-limits-reference)
 
 ---
 
@@ -164,13 +127,13 @@ One ElevenLabs agent CAN handle multiple concurrent conversations — each conve
 
 | Data | Written When | Written Where | Status |
 |------|-------------|--------------|--------|
-| Call record (basic metadata) | Post-call webhook (step 6) | `calls` table | Works but has dedup race (see 2.6) |
+| Call record (basic metadata) | Post-call webhook (step 6) | `calls` table | Works (dedup fix tracked in GH Issues) |
 | Transcript (full conversation text) | Post-conversation webhook (step 5) | `calls.transcript` | Works |
 | Summary (AI-generated 2-3 sentences) | Post-conversation webhook (step 5) | `calls.summary` | Works |
 | Sentiment (1-5 scale) | Post-conversation webhook (step 5) | `calls.sentiment` | Works |
 | Intent category | Post-conversation webhook (step 5) | `calls.intentCategory` | Works |
 | Recording URL | Post-call webhook (step 6) | `calls.recordingUrl` | Works |
-| Appointment | During call (tool, step 4) or post-conversation (step 5) | `appointments` table | **Double-booking race condition** (see 2.4) |
+| Appointment | During call (tool, step 4) or post-conversation (step 5) | `appointments` table | Race condition fix tracked in GH Issues |
 | Caller memory (episodic) | Post-conversation webhook (step 5) | `caller_memories` table | Works (upsert by phone + customerId) |
 | Google Calendar sync | **NOT IMPLEMENTED** | -- | Appointments stay local-only |
 
@@ -185,178 +148,7 @@ Businesses can create multiple agents (front-office, accountant, sales, manager)
 
 ---
 
-## 2. Critical Issues
-
-These must be fixed before any real customer traffic.
-
-### 2.1 Redis Connection-Per-Request Anti-Pattern
-
-**Location:** `middleware/rate-limit.ts:78-124`
-**Severity:** CRITICAL — will crash under load
-
-The Redis rate limiter creates a **new ioredis connection**, runs one Lua script, then `quit()`s — on **every single HTTP request**. With 100 req/s, that's 100 TCP connections opened and closed per second against Redis.
-
-```typescript
-// CURRENT (broken): new connection per request
-async check(key, limit, windowMs) {
-  const redis = new Redis(this.redisUrl, { ... });
-  await redis.connect();
-  const result = await redis.eval(luaScript, ...);
-  await redis.quit();  // opens and closes on every request
-}
-```
-
-**Impact:** At ~50 concurrent requests, Redis will start refusing connections. At ~200, the Node.js process will exhaust file descriptors and crash.
-
-**Fix:** Create a single shared Redis connection at module initialization.
-
-### ~~2.2 Stripe Webhook Has No Idempotency Check~~ *(Stripe removed — not applicable)*
-
-~~**Location:** `routes/billing.ts:232-357`~~
-~~**Severity:** CRITICAL — risk of duplicate charges / double state mutations~~
-
-~~Stripe retries webhooks on timeout (up to 3 days). The handler processes events without checking if the `event.id` was already handled. The `webhook_events` table exists for idempotency tracking, but **it is never used in the billing webhook handler**.~~
-
-~~**Impact:** Network timeout during webhook processing -> Stripe retries -> `checkout.session.completed` fires twice -> subscription activated twice, potential double email, corrupted state.~~
-
-~~**Fix:** Check `event.id` against `webhook_events` before processing. Wrap in a transaction.~~
-
-### 2.3 Phone Number Purchase Is Not Atomic
-
-**Location:** `routes/numbers.ts:103-194`
-**Severity:** CRITICAL — money spent, system inconsistent
-
-The phone purchase is a 5-step pipeline with no transaction:
-1. Purchase number on Telnyx (money charged)
-2. Create SIP connection — failure here = money spent, no SIP
-3. Assign number to SIP — failure here = silently swallowed
-4. Import to ElevenLabs — failure here = silently swallowed
-5. Update DB
-
-Steps 3 and 4 explicitly catch-and-swallow errors (`log.warn` but continue). If step 2 fails, money is charged but the customer has a broken number with no way to recover except manual intervention.
-
-**Fix:** Wrap steps 2-5 in a compensating transaction pattern. If ElevenLabs import fails, at minimum store the failure state and expose a "retry SIP setup" action in the admin panel.
-
-### 2.4 Appointment Booking Race Condition
-
-**Location:** `routes/calls.ts` (appointment creation in tool callbacks)
-**Severity:** HIGH — double bookings possible
-
-The calendar slot check and appointment insert are separate queries with no transaction or optimistic locking. Two concurrent calls can both check availability, both find the slot open, and both insert — creating a double booking.
-
-**Fix:** Wrap in `db.transaction()` with a unique constraint on `(agentId, scheduledAt)` or use `SELECT ... FOR UPDATE`.
-
-### 2.5 Admin Secret Hardcoded with Fallback
-
-**Location:** `routes/admin.ts:41`
-**Severity:** HIGH — anyone can access admin panel
-
-```typescript
-const adminSecret = env.ADMIN_SECRET ?? 'voiceforge-admin-2026';
-```
-
-If `ADMIN_SECRET` is not set in production, the fallback is publicly known. Combined with admin accepting `?token=` in query params (visible in Nginx logs, browser history, referer headers), this is an open door.
-
-**Fix:** Remove the fallback. Require `ADMIN_SECRET` in production env validation. Remove query param auth.
-
-### 2.6 Duplicate Call Records (Dual Webhook Race)
-
-**Location:** `webhooks.ts:103-158` and `elevenlabs-webhooks.ts:68-234`
-**Severity:** HIGH — duplicate/overwritten call data
-
-Both Telnyx and ElevenLabs send post-call webhooks for the same conversation. The system has three independent writers for call records:
-
-1. **Telnyx post-call** (`webhooks.ts:146-158`) — inserts a new `calls` row
-2. **ElevenLabs post-conversation** (`elevenlabs-webhooks.ts:199-234`) — searches for a recent call (last 2 minutes by time window, not conversation ID), then updates or inserts
-3. **Conversation sync worker** (`conversation-sync.ts:109-133`) — runs every 2 minutes, catches missed webhooks
-
-**Race scenarios:**
-- ~~Two Telnyx webhooks arrive for the same conversation (retry): both pass the idempotency check (`webhookEvents.findFirst` at line 103 has no transaction), both insert -> **duplicate call records**~~ **PARTIALLY FIXED:** `telnyxConversationId` now has `.unique()` constraint in schema (`calls.ts:39`), so the DB will reject true duplicates. However, the handlers still don't use `ON CONFLICT UPDATE`, meaning retries will get a DB error instead of a graceful update.
-- ElevenLabs webhook searches for "recent call in last 2 minutes" — with 20 concurrent calls ending within seconds, it can match the **wrong** call record and overwrite its data
-- Worker and webhook fire simultaneously for the same conversation: both pass dedup check, both insert
-
-**Root causes:**
-- ~~No unique constraint on `calls.telnyxConversationId` (it's indexed but allows duplicates)~~ **FIXED:** `.unique()` now on schema
-- Idempotency check is not atomic (SELECT then INSERT without transaction)
-- ElevenLabs dedup uses time-window matching instead of conversation ID matching
-
-**Remaining fix needed:**
-1. ~~Add `UNIQUE` constraint on `calls(telnyxConversationId)` with `ON CONFLICT UPDATE`~~ UNIQUE exists; add `ON CONFLICT UPDATE` to handlers
-2. Wrap idempotency check + call insert in `db.transaction()`
-3. Match ElevenLabs post-conversation to existing call by conversation ID, not time window
-
-### 2.7 Appointment Double-Booking (Three Unprotected Code Paths)
-
-**Location:** Three separate endpoints, all with the same check-then-insert race condition:
-- `elevenlabs-webhooks.ts:636-689` — server tool `book_appointment` (called during live call)
-- `elevenlabs-webhooks.ts:323-343` — post-conversation appointment creation
-- `tools.ts:180-210` — legacy calendar book endpoint
-
-**Severity:** HIGH — confirmed double-booking under concurrent load
-
-With 20 concurrent calls, if 3 callers request "Tuesday at 10:00" simultaneously:
-```
-Call A: SELECT appointments WHERE time = 10:00 -> empty -> INSERT at 10:00 (success)
-Call B: SELECT appointments WHERE time = 10:00 -> empty -> INSERT at 10:00 (success, DUPLICATE)
-Call C: SELECT appointments WHERE time = 10:00 -> empty -> INSERT at 10:00 (success, TRIPLICATE)
-```
-
-No transaction, no `SELECT FOR UPDATE`, no unique constraint on `(customerId, scheduledAt)`.
-
-The post-conversation handler (`elevenlabs-webhooks.ts:323-343`) has a "bump to next available slot" mechanism, but it also races: two webhooks can both read the same conflict set, both bump to the same new slot, and both insert.
-
-**Fix:**
-1. Add unique constraint: `UNIQUE(customer_id, scheduled_at)` on `appointments` table
-2. Wrap all three booking paths in `db.transaction()` with `SELECT ... FOR UPDATE` on the conflict window
-3. Use `ON CONFLICT` clause as a safety net: if unique constraint fires, return "slot taken" to caller
-
-### 2.8 Caller Memory Update Race
-
-**Location:** `elevenlabs-webhooks.ts:376-425`
-**Severity:** MEDIUM — data loss on concurrent calls from same phone number
-
-Caller memory is upserted by `(customerId, callerPhone)`. If the same person calls two different agents simultaneously (or hangs up and calls back quickly), both post-conversation webhooks try to update the same `caller_memories` row. Without a transaction, the second write can overwrite `callCount`, `totalDurationSeconds`, and `lastSentiment` from the first.
-
-**Fix:** Use `db.transaction()` with `SELECT FOR UPDATE` on the caller memory row, or use SQL atomic increments (`SET call_count = call_count + 1`) instead of read-then-write.
-
-### 2.9 No Usage Metering — Revenue Leak
-
-**Severity:** CRITICAL — customers can exceed plan limits with zero billing consequence
-
-Plan limits are defined in `packages/shared/src/constants.ts` (Basic: X minutes, Pro: Y minutes, Enterprise: Z minutes). ~~Stripe subscriptions are working.~~ But there is **no call-minute counter per billing cycle**, ~~no Stripe Meter API reporting,~~ and no overage enforcement.
-
-**What's missing:**
-1. No `duration_seconds` tracking aggregated per billing period
-2. No `usage_records` table to track minutes consumed vs plan limits
-3. ~~No Stripe metering API integration (`stripe.billing.meterEvents.create()`)~~ *(Stripe removed)*
-4. No soft-limit enforcement (e.g., pause agent when quota exceeded)
-
-**Fix:**
-```sql
-CREATE TABLE usage_records (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  customer_id UUID REFERENCES customers(id),
-  billing_period_start TIMESTAMPTZ,
-  billing_period_end TIMESTAMPTZ,
-  minutes_used DECIMAL(8,2) DEFAULT 0,
-  minutes_limit INTEGER,
-  overage_minutes DECIMAL(8,2) DEFAULT 0,
-  -- reported_to_stripe BOOLEAN DEFAULT false, (Stripe removed)
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-```
-
-**Backend changes:**
-1. In `elevenlabs-webhooks.ts` post-conversation handler: calculate `duration_seconds`, update `calls` record
-2. ~~Create `usageService.reportUsage(customerId, minutes)` that calls `stripe.billing.meterEvents.create()`~~ *(Stripe removed)*
-3. ~~Worker: nightly job to aggregate and report to Stripe~~ *(Stripe removed)*
-4. Soft-limit enforcement: if customer exceeds quota, pause agent via ElevenLabs API
-
-**Estimated effort:** 5 days
-
----
-
-## 3. Capacity Estimation
+## 2. Capacity Estimation
 
 ### Assumptions Per Customer
 
@@ -382,21 +174,21 @@ A medium-sized company registers, creates 4 agents (front-office, accountant, sa
 | Pre-call webhooks (agent lookup) | 20 | 20 read queries, sub-50ms each | No — read-only, fast |
 | Voice conversations | 20 | **Zero** — ElevenLabs hosts the AI | No |
 | `check_availability` tool calls | ~10 | 10 read queries to `appointments` | No |
-| `book_appointment` tool calls | ~5 | 5 write queries | **YES — double-booking race** (see 2.7) |
-| Post-conversation webhooks | 20 | 20 call record upserts + 20 memory upserts | **YES — dedup race** (see 2.6) |
-| Post-call webhooks (Telnyx) | 20 | 20 call record inserts | **YES — duplicate records** (see 2.6) |
-| Conversation sync worker | 1 run | Polls ElevenLabs API for all agents | **YES — races with webhooks** (see 2.6) |
+| `book_appointment` tool calls | ~5 | 5 write queries | **YES — requires code fixes (GH Issues)** |
+| Post-conversation webhooks | 20 | 20 call record upserts + 20 memory upserts | **YES — requires code fixes (GH Issues)** |
+| Post-call webhooks (Telnyx) | 20 | 20 call record inserts | **YES — requires code fixes (GH Issues)** |
+| Conversation sync worker | 1 run | Polls ElevenLabs API for all agents | **YES — requires code fixes (GH Issues)** |
 | DB connections used simultaneously | ~25-30 | Pool of 25 (prod) | **TIGHT** — may exhaust pool |
-| Redis rate limit checks | ~60+ | **WILL FAIL** — connection-per-request bug (see 2.1) | **CRITICAL** |
+| Redis rate limit checks | ~60+ | **WILL FAIL** — requires code fix (GH Issues) | **CRITICAL** |
 
 **ElevenLabs concurrency is the external bottleneck:**
 - **Scale (CURRENT): 30 concurrent, 3,600 min/mo ($330/mo), additional minutes at $0.10/min, burst at $0.20/min**
 - **Business: 30 concurrent, 13,750 min/mo ($1,320/mo), additional minutes at $0.10/min, burst at $0.19/min**
 - Enterprise: elevated concurrency, custom terms/DPA/SLAs, contact sales
 
-**Verdict for 20 concurrent calls right now:** Mostly works for the call handling itself (ElevenLabs does the heavy lifting), but **data integrity is broken** — double bookings, duplicate call records, and Redis will crash under the webhook burst.
+**Verdict for 20 concurrent calls right now:** Mostly works for the call handling itself (ElevenLabs does the heavy lifting), but **data integrity requires code fixes** tracked in GitHub Issues.
 
-**ElevenLabs minutes are the billing bottleneck:** Scale plan includes 3,600 min/mo (~120 min/day). With 10 customers averaging 10 calls/day at 3-5 min each = 300-500 min/day — included minutes exhausted in ~1 week, then $0.10/min overage + $0.09/min hosting cost kicks in. Usage metering (Section 2.9) is critical to track consumption and pass costs through to customers.
+**ElevenLabs minutes are the billing bottleneck:** Scale plan includes 3,600 min/mo (~120 min/day). With 10 customers averaging 10 calls/day at 3-5 min each = 300-500 min/day — included minutes exhausted in ~1 week, then $0.10/min overage + $0.09/min hosting cost kicks in. Usage metering is critical to track consumption and pass costs through to customers.
 
 ### 10 Concurrent Users (Closed Beta)
 
@@ -406,7 +198,7 @@ Each user is a business with 1-3 agents. Peak concurrent calls across all users:
 |----------|------|------------------|---------|
 | **API requests/min** | ~50-100 | 100/min rate limit, single instance handles ~1000/min | OK |
 | **DB connections** | 3-5 concurrent | Pool of 20 (dev) / 25 (prod) | OK |
-| **Redis** | ~50-100 ops/min | **BROKEN** — new connection per request | FAIL |
+| **Redis** | ~50-100 ops/min | Requires code fix (GH Issues) | FAIL |
 | **ElevenLabs concurrent calls** | ~10-20 | Scale plan: 30 | OK |
 | **ElevenLabs minutes** | 300-500 min/day (10 customers) | Scale plan: 3,600 min/mo (~120/day) | **WILL EXHAUST in ~1 week** |
 | **ElevenLabs API** | 10-30 calls/day | Per-account limits, singleton client | OK |
@@ -416,7 +208,7 @@ Each user is a business with 1-3 agents. Peak concurrent calls across all users:
 | **PostgreSQL storage** | ~100MB/month | 10GB default | OK |
 | **Memory (API)** | ~150MB | 512MB limit | OK |
 
-**Verdict:** Works if you fix the Redis connection issue. Appointment double-booking is a latent risk that surfaces with popular time slots.
+**Verdict:** Works once code fixes in GitHub Issues are deployed (Redis connection, appointment booking). Infrastructure is adequate at this tier.
 
 ### 100 Concurrent Users (Growth Phase)
 
@@ -427,7 +219,7 @@ Peak concurrent calls across all users: ~50-100. Peak concurrent appointment boo
 | **API requests/min** | 500-1,000 | Single PM2 instance: ~1,000/min | TIGHT |
 | **DB connections** | 15-30 concurrent | Pool of 25 | **WILL EXHAUST** during call bursts |
 | **DB query latency** | Unpaginated agent lists | Calls endpoint now paginated (20/page); agents endpoint still returns all | RISK (agents only) |
-| **Redis** | 500-1,000 ops/min | BROKEN (see 2.1) | FAIL |
+| **Redis** | 500-1,000 ops/min | Requires code fix (GH Issues) | FAIL |
 | **ElevenLabs concurrent calls** | 50-100 | Scale plan: 30 | **BLOCKER — need Business ($1,320/mo) or Enterprise** |
 | **ElevenLabs minutes** | 3,000-5,000 min/day | Scale: 3,600/mo, Business: 13,750/mo | **BLOCKER — need Enterprise or per-customer API keys** |
 | **ElevenLabs API** | 200-500 calls/day | Rate limits vary by plan | MONITOR |
@@ -484,232 +276,16 @@ Peak concurrent calls: ~200-500. Peak concurrent bookings: ~20-50/min.
 
 ---
 
-## 4. Database Layer
-
-### Connection Pooling
-
-**Location:** `db/connection.ts`
-
-| Setting | Dev | Prod | Assessment |
-|---------|-----|------|------------|
-| Pool size | 20 | 25 | Adequate for 1 API instance. With PM2 x2, total is 50 connections. PostgreSQL default max_connections is 100 — works but little headroom. |
-| Idle timeout | 20s | 30s | Fine |
-| Connect timeout | 10s | 10s | Fine |
-| SSL | off | on | Correct |
-| `prepare: false` | yes | yes | Required for PgBouncer compatibility — good forward planning |
-
-**Issue at scale:** Each PM2 worker gets its own pool. 4 workers x 25 = 100 connections = PostgreSQL default limit. Need PgBouncer at ~100 users.
-
-### Missing Indexes
-
-These columns are queried in webhook handlers. Pre-call webhook must respond **< 1 second** or the call fails.
-
-| Table | Column | Query Location | Urgency | Fix |
-|-------|--------|---------------|---------|-----|
-| `agents` | `phoneNumber` | `webhooks.ts:41` (pre-call lookup) | **CRITICAL — 1s deadline** | Add index |
-| `agents` | `elevenlabsAgentId` | `elevenlabs-webhooks.ts:80-83` (post-conversation lookup) | High | Add index (already has `.unique()` but check if index exists) |
-| `agents` | `telnyxAssistantId` | `webhooks.ts:128` | ~~High~~ | ~~Add index~~ **FIXED:** Has `.unique()` constraint (acts as index) |
-| `calls` | `telnyxConversationId` | Already indexed + unique | -- | -- |
-| `appointments` | `(customerId, scheduledAt)` | `elevenlabs-webhooks.ts:636-648` (slot check during live call) | ~~**HIGH — blocks caller on the phone**~~ | ~~Add composite index~~ **FIXED:** `idx_appointments_scheduled` index exists on `(customerId, scheduledAt)` |
-| ~~`customers`~~ | ~~`stripeCustomerId`~~ | ~~`billing.ts:331`~~ | ~~Medium~~ | ~~Add index~~ *(Stripe removed)* |
-| `caller_memories` | `(customerId, callerPhone)` | `elevenlabs-webhooks.ts:376` (memory lookup) | Medium | Already indexed |
-| `pending_registrations` | `status` | `admin.ts:84` | Low | Add index if table grows |
-
-### Missing Pagination
-
-| Endpoint | Location | Risk |
-|----------|----------|------|
-| `GET /api/agents` | `agents.ts:273-305` | Returns ALL agents for a customer. With enterprise customers creating 50+ agents, response size grows. |
-| `GET /api/flows` | `flows.ts:144-146` | Same — returns all flows |
-| ~~`GET /api/calls`~~ | ~~`calls.ts`~~ | **FIXED:** Now paginated with `page`/`pageSize` query params (default 20, max 100), returns `meta: { page, pageSize, total, totalPages }` |
-
-### Missing Transactions
-
-| Operation | Location | Risk | Concurrent Trigger |
-|-----------|----------|------|-------------------|
-| Phone number purchase (5-step) | `numbers.ts:103-194` | Money charged, partial setup | Low (admin action) |
-| Appointment booking via server tool | `elevenlabs-webhooks.ts:636-689` | Double-booking | **High — concurrent calls book same slot** |
-| Appointment booking post-conversation | `elevenlabs-webhooks.ts:323-343` | Double-booking | **High — concurrent webhooks** |
-| Appointment booking legacy tool | `tools.ts:180-210` | Double-booking | Medium |
-| Call record insert (Telnyx) | `webhooks.ts:103-158` | Duplicate records | **High — webhook retries** |
-| Call record upsert (ElevenLabs) | `elevenlabs-webhooks.ts:199-234` | Data overwrite | **High — 20 calls ending within seconds** |
-| Caller memory upsert | `elevenlabs-webhooks.ts:376-425` | Counter/sentiment overwrite | Medium — same caller, two quick calls |
-| Webhook idempotency check | `webhooks.ts:103-110`, `elevenlabs-webhooks.ts:68-77` | Duplicate processing | **High — dual webhook system** |
-| Worker conversation sync | `conversation-sync.ts:109-133` | Races with real-time webhooks | Medium — 2-min poll interval |
-| ~~Stripe checkout -> DB update~~ | ~~`billing.ts:253-266`~~ | ~~Double activation if webhook retried~~ | ~~Low-Medium~~ *(Stripe removed)* |
-
-### Missing Unique Constraints
-
-| Table | Suggested Constraint | Purpose |
-|-------|---------------------|---------|
-| `calls` | ~~`UNIQUE(telnyx_conversation_id)`~~ | ~~Prevent duplicate call records from webhook retries~~ **FIXED:** `.unique()` exists on `telnyxConversationId` |
-| `appointments` | `UNIQUE(customer_id, scheduled_at)` | Prevent double-bookings at same time slot |
-| `webhook_events` | Already has `UNIQUE(event_id)` | Good — but check is not atomic with processing |
-| `caller_memories` | `UNIQUE(customer_id, caller_phone)` | Prevent duplicate memory rows (currently no constraint) |
-
-### N+1 Query Patterns
-
-| Location | Pattern | Fix |
-|----------|---------|-----|
-| `flows.ts:220-231` | Loops KB docs to build count map after fetching agents | Use SQL `COUNT(*) GROUP BY agent_id` |
-
-### What's Done Well
-
-- All queries use Drizzle ORM (parameterized, no SQL injection)
-- Proper `cascade` and `set null` on foreign keys
-- Performance indexes on high-traffic tables (`calls`, `appointments`, `caller_memories`)
-- UUID primary keys (no sequential ID leakage)
-- `webhook_events` table exists for idempotency (just not used everywhere)
-- Health check endpoint verifies DB connectivity with latency measurement
-
----
-
-## 5. External Service Integrations
-
-### ElevenLabs (Primary AI Platform)
-
-**Location:** `services/elevenlabs.ts` (946 lines)
-
-| Aspect | Status | Detail |
-|--------|--------|--------|
-| Client pattern | Singleton | Good — one `ElevenLabsClient` reused across requests |
-| Timeout | SDK default | No explicit timeout configured. Raw `fetch()` calls at line 808 have **no timeout** |
-| Retry | None at service level | SDK may have built-in retries. Manual 3-attempt retry with 4s delay exists in `calls.ts:533-556` for conversation fetching |
-| Rate limit handling | None | No backoff, no queuing. Concurrent dashboard loads from 100 users could exhaust ElevenLabs rate limits |
-| Circuit breaker | None | If ElevenLabs is down, every agent CRUD operation fails with 500 |
-| Error handling | Catch + rethrow | Errors logged and re-thrown. No retry, no fallback |
-| Concurrency | No limit | If 50 users update agents simultaneously, 50 parallel API calls to ElevenLabs |
-
-**ElevenLabs Plan Limits (current plan: Scale):**
-
-| | Scale (CURRENT) | Business | Enterprise |
-|--|-----------------|----------|------------|
-| **Price** | $330/mo | $1,320/mo | Custom |
-| **Minutes included** | 3,600 | 13,750 | Custom |
-| **Concurrent calls** | 30 | 30 | Elevated |
-| **Additional minutes** | $0.10/min | $0.10/min | Custom |
-| **Burst pricing** | $0.20/min | $0.19/min | Custom |
-| **Hosting cost (calls)** | $0.09/min | $0.09/min | $0.09/min |
-| **LLM tokens** | At cost | At cost | At cost |
-| **Telephony provider** | At cost | At cost | At cost |
-| **Workspace seats** | 3 | 5 | More |
-| **DPA/SLAs** | No | No | Yes |
-- Enterprise: negotiable
-- API rate limits: ~100 req/min on agent management endpoints
-
-**Recommendations:**
-1. Add `AbortController` timeout (30s) to all raw `fetch()` calls
-2. Add a semaphore/queue for ElevenLabs API calls (max 10 concurrent)
-3. Cache agent configuration reads (agent config changes rarely, reads happen every call)
-4. Add circuit breaker: after 5 consecutive failures, fast-fail for 30s
-
-### Telnyx (Telephony)
-
-**Location:** `services/telnyx.ts` (691 lines)
-
-| Aspect | Status | Detail |
-|--------|--------|--------|
-| Client pattern | Master singleton + per-request sub-account clients | Master: good. Sub-account: creates new `Telnyx()` per request — overhead but acceptable since SDK is lightweight |
-| Timeout | 30s via SDK | Good. But raw `fetch()` calls at lines 404, 427, 459 have **no timeout** |
-| Retry | SDK `maxRetries: 3` | Built-in, but no exponential backoff |
-| SIP connection creation | 2-step (connection + FQDN) | **Not atomic** — if FQDN call fails, orphaned connection. Line 427: second `fetch()` result is not checked |
-| Sub-account client | Decrypts API key per request | Acceptable — `decrypt()` is fast (AES-GCM). But client is not cached. |
-
-**Recommendations:**
-1. Add timeout to raw `fetch()` calls
-2. Add error handling for FQDN assignment (line 427-438)
-3. Cache sub-account clients by customer ID (LRU, 5-min TTL)
-
-### ~~Stripe (Billing)~~ *(legacy — to be removed)*
-
-~~**Location:** `services/stripe.ts` + `routes/billing.ts`~~
-
-| Aspect | Status | Detail |
-|--------|--------|--------|
-| ~~Webhook signature~~ | ~~HMAC-SHA256 via SDK~~ | ~~Good~~ |
-| ~~Idempotency keys on mutations~~ | ~~**Missing**~~ | ~~`stripe.customers.create()`, `stripe.checkout.sessions.create()` — no idempotency key~~ |
-| ~~Webhook idempotency~~ | ~~**Missing**~~ | ~~`event.id` not checked against DB (see 2.2)~~ |
-| ~~Payment failure handling~~ | ~~Email notification~~ | ~~One-shot attempt, no retry if email fails~~ |
-| ~~Subscription state machine~~ | ~~Handles active/past_due/canceled/unpaid~~ | ~~Good coverage~~ |
-
-~~**Recommendations:**~~
-1. ~~Add `idempotencyKey` to all Stripe mutation calls~~
-2. ~~Check `event.id` in `webhook_events` table before processing~~
-3. ~~Add retry for payment failure email (or use Resend's built-in retry)~~
-
-*Stripe is not used in this project. The entire billing integration (`services/stripe.ts`, `routes/billing.ts`, DB columns, shared types) is legacy code to be removed.*
-
-### Resend (Email)
-
-**Location:** `services/email.ts` (557+ lines)
-
-| Aspect | Status | Detail |
-|--------|--------|--------|
-| Graceful degradation | Good | Missing API key returns 'skipped' via `isEmailConfigured()` check |
-| HTML sanitization | Good | `escapeHtml()` for user-provided content |
-| Retry | Handled by Resend | Resend retries failed deliveries automatically for up to 72 hours (soft bounces, transient server issues). Our code does not need retry logic. |
-| Delivery tracking | **MISSING** | Resend returns a message ID per send, but we don't store it. No way to know if a call summary email was delivered, bounced, or failed. |
-| Resend webhooks | **MISSING** | Resend can POST delivery events (`delivered`, `bounced`, `complained`) to our API. Not configured. |
-| Template management | Inline HTML | Acceptable for current scale |
-| Welcome email | **FIXED** (since last audit) | Sent on onboarding completion (`customers.ts:230`) |
-| Call summary email | **FIXED** (since last audit) | `notifyCallCompleted()` called in both `elevenlabs-webhooks.ts:292` and `conversation-sync.ts:305` |
-| ~~Payment failure email~~ | ~~**FIXED** (since last audit)~~ | ~~`sendPaymentFailedEmail()` on `invoice.payment_failed` Stripe event (`billing.ts:335`)~~ *(Stripe removed)* |
-| License key email | Working | Sends with .ics calendar invite support |
-| Appointment invite email | **FIXED** (since last audit) | `sendAppointmentInviteEmail()` with .ics attachment |
-| FROM address | **FIXED** (since last audit) | Now configurable via `EMAIL_FROM` env var (`env.ts:85`) |
-
----
-
-## 6. Caching Strategy
-
-### Current State: No Application-Level Caching
-
-Redis is configured and running, but **only used for rate limiting**. Every API request hits PostgreSQL directly.
-
-| Data | Access Pattern | Cache Candidate? | Recommended TTL |
-|------|---------------|-------------------|----------------|
-| Customer profile | Every authenticated request (auth -> DB lookup) | **YES** (highest impact) | 5 min |
-| Agent configuration | Every incoming call (webhook lookup) | **YES** | 2 min (invalidate on update) |
-| Voice list | Dashboard load, agent creation | **YES** (already has HTTP cache header) | 1 hour |
-| Call history | Dashboard load, paginated | Maybe (stale-while-revalidate) | 30 sec |
-| KB documents list | Dashboard, agent edit | Low priority | -- |
-
-### HTTP Caching
-
-| Route | Current | Recommended |
-|-------|---------|-------------|
-| `GET /api/voices` | `Cache-Control: public, max-age=3600` | -- (already good) |
-| `GET /widget/:agentId/embed.js` | `Cache-Control: public, max-age=300` | -- (already good) |
-| `GET /api/agents` | None | `Cache-Control: private, max-age=60` |
-| `GET /api/calls` | None | `Cache-Control: private, max-age=30` |
-| `GET /api/customers/me` | None | `Cache-Control: private, max-age=300` |
-| ETag support | None anywhere | Add for agent config (save bandwidth on mobile) |
-
-### Recommended Caching Architecture
-
-```
-Request -> Rate Limiter (Redis) -> Auth Check
-  -> Redis Cache Check (GET only)
-    -> HIT: return cached response
-    -> MISS: query PostgreSQL -> store in Redis -> return
-
-Agent/Customer UPDATE -> invalidate Redis cache keys
-```
-
-**Implementation priority:** Cache the customer profile lookup that happens on every authenticated request. This alone eliminates ~50% of DB queries.
-
----
-
-## 7. Security Posture
+## 3. Security Posture
 
 ### What's Strong
 
 | Feature | Implementation | Assessment |
 |---------|---------------|------------|
 | Encryption at rest | AES-256-GCM, random IV per operation, auth tag | Industry standard |
-| Webhook verification | Ed25519 (Telnyx) + ~~HMAC-SHA256 (Stripe)~~ + 5-min replay protection | Excellent |
+| Webhook verification | Ed25519 (Telnyx) + 5-min replay protection | Excellent |
 | Auth | Stateless JWT, local HS256 verification, no HTTP round-trip in prod | Fast + secure |
-| Rate limiting | Redis-backed sliding window with Lua atomic ops, plan-based tiers | Well-designed (fix connection issue) |
+| Rate limiting | Redis-backed sliding window with Lua atomic ops, plan-based tiers | Well-designed |
 | Input validation | Zod on all endpoints | Comprehensive |
 | PII handling | Pino redaction of email, phone, auth headers in production | GDPR compliant |
 | Security headers | HSTS (2yr), X-Frame-Options DENY, nosniff, referrer-policy | Strong |
@@ -719,93 +295,11 @@ Agent/Customer UPDATE -> invalidate Redis cache keys
 | SSL/TLS | TLSv1.2+, ECDHE ciphers, HSTS preload-ready | Production grade |
 | Docker | Non-root user, localhost-only ports, resource limits | Hardened |
 
-### Issues to Fix
-
-| Severity | Issue | Location | Fix |
-|----------|-------|----------|-----|
-| **Critical** | Admin fallback secret: `'voiceforge-admin-2026'` | `admin.ts:41,62` | Remove fallback, require env var |
-| **Critical** | Admin accepts `?token=` query param | `admin.ts:40` | Header only (`X-Admin-Token`) |
-| **High** | No rate limiting on admin routes | `admin.ts`, `index.ts:124` | Pre-configured `authRateLimiter` (10/min) exists but is NOT attached to admin routes |
-| **High** | No rate limiting on GDPR routes | `gdpr.ts`, `index.ts:141` | Pre-configured `gdprRateLimiter` (5/min) exists but is NOT attached to GDPR routes |
-| **High** | Hardcoded IBAN | `registration.ts:30-36` | Env var |
-| **High** | No CSP header | `index.ts`, `nginx/` | `secureHeaders()` sets HSTS/X-Frame/nosniff/referrer but NO CSP |
-| **Medium** | Rate limiter fails open on Redis failure | `rate-limit.ts:137` | Fail-closed for auth endpoints |
-| **Medium** | SHA-256 for password hashing (registrations) | `license.ts:50-54` | Uses `createHash('sha256')` — code even has comment: "In production, use bcrypt or argon2" |
-| **Medium** | No encryption key rotation mechanism | `encryption.ts` | Single static key, no versioning. Rotation requires re-encrypting all stored secrets + app restart |
-| **Low** | Widget CORS `origin: *` | `index.ts:115` | Intentional, but document it |
-| **Low** | No Supabase RLS (Row Level Security) | DB schema | App verifies ownership in code (`customer.id` check per query). Acceptable, but if Supabase is ever exposed directly (Realtime subscriptions, direct client queries), RLS must be added as defense-in-depth. |
+Security issues to fix (admin secret fallback, CSP headers, rate limiter gaps, password hashing) are tracked in GitHub Issues.
 
 ---
 
-## 8. Resilience & Error Handling
-
-### Current Patterns
-
-| Pattern | Status | Detail |
-|---------|--------|--------|
-| Global error handler | Done | `index.ts:146-166` — catches HTTPException + unhandled errors, returns structured JSON |
-| 404 handler | Done | `index.ts:169-177` |
-| Graceful shutdown | Done | SIGTERM/SIGINT with 10s force timeout |
-| Worker error isolation | Done | Each task try-caught, failure doesn't stop scheduler |
-| Webhook signature failure | Done | 401 with no information leakage |
-| Auth failure | Done | Generic messages, no token/key leakage |
-
-### Missing Resilience Patterns
-
-| Pattern | Impact | Effort |
-|---------|--------|--------|
-| **Retry with backoff** (ElevenLabs, Resend) | Transient failures = silent data loss | 1 day |
-| **Circuit breaker** (all external APIs) | One down service cascades to all operations | 2 days |
-| ~~**Idempotency keys** (Stripe mutations)~~ | ~~Network retries create duplicate resources~~ | ~~Half day~~ *(Stripe removed)* |
-| **Request timeout** (raw fetch calls) | Hung requests consume connection pool | Half day |
-| **Dead letter queue** | Failed webhook events are lost on process restart | 1-2 days |
-| **Outbox pattern** | Webhook processing not durable across restarts | 2-3 days |
-| **Bulkhead isolation** | One slow external API blocks all requests | 2 days |
-
-### Error Handling Gaps
-
-| Location | Issue |
-|----------|-------|
-| `numbers.ts:132-138` | SIP assignment failure silently swallowed — customer sees "success" but SIP is broken |
-| `numbers.ts:152-154` | ElevenLabs import failure silently swallowed — same issue |
-| `flows.ts:634-646` | Deployment errors in loop only logged as warn, continue deploying |
-| `billing.ts:341-343` | Payment failure email error caught but not retried |
-| `telnyx.ts:427-438` | FQDN assignment after SIP creation — second call has no error check at all |
-
----
-
-## 9. Frontend Architecture
-
-### Strengths
-
-| Area | Detail |
-|------|--------|
-| Auth | Supabase `onAuthStateChange` listener, proper cleanup on unmount |
-| State management | Zustand with minimal surface (auth store only), no stale state issues |
-| Route protection | Next.js middleware checks protected prefixes, redirects to `/login` |
-| API client | Token provider pattern with fresh token per request |
-| Parallel loading | Dashboard uses `Promise.all` for concurrent data fetching |
-
-### Issues
-
-| Issue | Location | Impact |
-|-------|----------|--------|
-| **No retry logic** in API client | `api-client.ts` | Network blip = white screen / stale data |
-| **No request deduplication** | `api-client.ts` | Rapid clicks fire duplicate requests |
-| **All pages are client-side** | `'use client'` on every page | No SSR benefit — slower initial load, poor SEO (acceptable for dashboard SaaS) |
-| **No loading states on errors** | Various dashboard pages | Errors caught silently with `.catch(() => null)` — user sees empty data, no error message |
-| **Timer cleanup** | `support-chatbot.tsx`, `agent-test-widget.tsx` | `setTimeout` without cleanup in unmount — minor |
-
-### Recommendations
-
-1. Add retry (1 retry with 1s delay) to API client for GET requests
-2. Add global error boundary with user-friendly error state
-3. Show toast on API errors instead of silently swallowing
-4. Consider SWR or TanStack Query for cache + dedup + retry (replaces manual useState/useEffect fetch patterns)
-
----
-
-## 10. Observability & Monitoring
+## 4. Observability & Monitoring
 
 ### What Exists
 
@@ -854,7 +348,7 @@ For a single-droplet SaaS at our scale, three free tools cover everything:
 
 ---
 
-## 11. Deployment & Infrastructure
+## 5. Deployment & Infrastructure
 
 ### Current Demo Infrastructure
 
@@ -1130,33 +624,7 @@ When handling 50+ concurrent calls across all customers:
 
 ---
 
-## 12. Test Coverage
-
-**Current state: Zero tests.** No test files, no test framework configured.
-
-### Recommended Framework
-
-**Vitest** — native ESM/TypeScript, fast, Hono `app.request()` for route testing.
-
-### Priority Test Cases (ordered by risk reduction)
-
-| Priority | Test | Type | What It Prevents |
-|----------|------|------|-----------------|
-| ~~P0~~ | ~~Stripe webhook idempotency~~ | ~~Integration~~ | ~~Duplicate charges~~ *(Stripe removed)* |
-| P0 | Auth middleware — valid/invalid/expired JWT | Unit | Auth bypass |
-| P0 | Webhook signature verification | Unit | Webhook spoofing |
-| P0 | Encryption round-trip (encrypt then decrypt) | Unit | Data loss |
-| P1 | Rate limit — exceeded returns 429 | Unit | Abuse |
-| P1 | Agent CRUD lifecycle | Integration | Data corruption |
-| P1 | GDPR export/delete | Integration | Compliance violation |
-| P1 | Registration validation | Integration | Bad data in DB |
-| P2 | Appointment booking (concurrent) | Integration | Double bookings |
-| P2 | Phone number purchase (failure scenarios) | Integration | Money charged, no service |
-| P2 | Health check with DB down | Smoke | False positives |
-
----
-
-## 13. Business & Operational Readiness
+## 6. Business & Operational Readiness
 
 Beyond code and infrastructure, a production SaaS targeting SMEs needs legal, operational, and go-to-market foundations.
 
@@ -1173,65 +641,6 @@ Beyond code and infrastructure, a production SaaS targeting SMEs needs legal, op
 | **Audit logging** | Done | `audit_logs` table tracks data access, deletion, settings changes. |
 | **Data retention policy** | Done | Auto-anonymization: calls after 365 days, webhooks after 90 days, audit logs after 2 years. Needs to be documented in the Privacy Policy. |
 
-### Analytics & Metrics (Required for Business Decisions)
-
-| Item | Status | Recommendation |
-|------|--------|---------------|
-| **Product analytics** | **MISSING** — no tracking at all | Add Plausible (privacy-friendly, EU-hosted, no cookie consent needed) or PostHog (self-hostable). Track: signups, onboarding completion, first call, agent creation, churn. |
-| **Marketing attribution** | **MISSING** | Add UTM tracking on landing page CTAs. Track which channel (Google, social, referral) drives signups. |
-| **Business KPIs dashboard** | **MISSING** | Admin panel has basic stats (customer count, license counts). Missing: MRR, churn rate, calls/customer, avg call duration, NPS. |
-| **Revenue tracking** | **MISSING** | No internal revenue dashboard or MRR calculation. |
-
-### SEO & Social (Required for Organic Growth)
-
-| Item | Status | Location | Fix |
-|------|--------|----------|-----|
-| **Page title + description** | Done | `apps/web/src/app/layout.tsx` | Metadata set |
-| **OpenGraph tags** | **MISSING** | `layout.tsx` | Add `og:title`, `og:description`, `og:image`, `og:url`. Without these, links shared on social media/WhatsApp/LinkedIn show no preview. |
-| **Twitter Card tags** | **MISSING** | `layout.tsx` | Add `twitter:card`, `twitter:title`, `twitter:image` |
-| **robots.txt** | **MISSING** | Should be at `apps/web/public/robots.txt` | Create with `Allow: /` and `Sitemap:` directive |
-| **sitemap.xml** | **MISSING** | Should be at `apps/web/public/sitemap.xml` or generated by Next.js | Create for landing page, login, registration routes |
-| **Favicon / app icons** | Unknown | `apps/web/public/` | Verify favicon.ico, apple-touch-icon, and manifest.json exist |
-| **Structured data (JSON-LD)** | **MISSING** | Landing page | Add `Organization` and `SoftwareApplication` schema for rich Google results |
-
-### Error & Edge Case UX
-
-| Item | Status | Detail |
-|------|--------|--------|
-| **404 page** | Done | `apps/web/src/app/not-found.tsx` |
-| **Global error boundary** | Done | `apps/web/src/app/error.tsx` and `apps/web/src/app/dashboard/error.tsx` |
-| **Rate limit UX** | **MISSING** | API returns HTTP 429 with `Retry-After` header, but the frontend has no handler — user sees a silent failure or white screen. |
-| **Payment failure UX** | Partially done | Email sent on payment failure. No in-app banner warning users their subscription is at risk. |
-| **Offline/network error UX** | **MISSING** | No retry, no toast, no offline indicator. Network blip = silent data loss in UI. |
-| **Empty states** | Unknown | Verify dashboard pages show helpful empty states (no calls yet, no agents yet) instead of blank space. |
-
-### Onboarding & Customer Success
-
-| Item | Status | Detail |
-|------|--------|--------|
-| **Onboarding flow** | Done | Multi-step onboarding in `apps/web/src/app/onboarding/` |
-| **Welcome email** | Done | Single email after onboarding completion |
-| **Onboarding email sequence** | **MISSING** | No drip campaign. Day 1: welcome. Day 3: "set up your first agent". Day 7: "upload your knowledge base". Would reduce churn. |
-| **In-app help / tooltips** | **MISSING** | No contextual help, guided tours, or tooltip overlays. |
-| **Documentation / help center** | **MISSING** | No user-facing docs, FAQ, or help center. SME users will need guidance on setup. |
-| **Feedback collection** | **MISSING** | No NPS survey, feedback form, or in-app feedback widget. |
-
-### Admin Panel Completeness
-
-| Feature | Status | Detail |
-|---------|--------|--------|
-| List customers | Done | Shows all customers with key fields |
-| Dashboard stats | Done | Pending/approved registrations, license counts, active customers |
-| Manage registrations | Done | Approve, reject, view details |
-| Generate license keys | Done | With email notification to customer |
-| Revoke licenses | Done | With automatic customer deactivation |
-| **Edit customer details** | **MISSING** | Cannot modify customer profile, plan, or settings from admin |
-| **Suspend/unsuspend customer** | **MISSING** | No way to temporarily disable a customer without revoking their license |
-| **Extend license expiry** | **MISSING** | Cannot extend a customer's license without generating a new key |
-| **View customer's calls/agents** | **MISSING** | Admin cannot see a customer's call history or agent configuration |
-| **Manual billing actions** | **MISSING** | Cannot record manual payments, issue credits, or adjust invoices |
-| **System health dashboard** | **MISSING** | No view of ElevenLabs/Telnyx status, error rates, or system metrics in admin |
-
 ### External Service Account Setup
 
 Before production, these accounts need to be on production-ready plans:
@@ -1239,11 +648,25 @@ Before production, these accounts need to be on production-ready plans:
 | Service | Current Status | Production Requirement |
 |---------|---------------|----------------------|
 | **ElevenLabs** | Scale plan ($330/mo) — 30 concurrent, 3,600 min/mo, overage at $0.10/min | Sufficient concurrency for beta (30 calls). **Minutes are the bottleneck:** 10 active customers will exhaust 3,600 min/mo in ~1 week. Overage charges apply at $0.10/min. Upgrade to Business ($1,320/mo, 13,750 min) when minute spend exceeds ~$1,000/mo in overages. |
-| **Telnyx** | Unknown (demo API key) | Production account with Greek +30 number inventory. Verify Telnyx SIP trunk supports required concurrent call volume. |
-| ~~**Stripe**~~ | ~~Unknown (test/live mode?)~~ | ~~Switch from test mode to live mode. Verify webhook endpoints point to production URL.~~ *(Stripe removed — not used)* |
-| **Supabase** | Unknown | Production project with proper JWT secret. Verify Row-Level Security policies if applicable. |
-| **Resend** | Unknown | Verify domain is authenticated (SPF/DKIM/DMARC) for `noreply@salimov.ai` to avoid spam folder. |
-| **Domain DNS** | voiceforge.salimov.ai | Verify SPF, DKIM, DMARC records for email deliverability. Add CAA record for Let's Encrypt. |
+| **Telnyx** | Account approved, Greek +30 numbers acquired | Production account active. SIP trunk integration untested E2E — must verify on staging before launch. |
+| **Supabase** | Paid tier (cloud) | Production project with proper JWT secret. Verify settings in Section 8 checklist. |
+| **Resend** | Configured with demo domain | Reconfigure for production domain (`<domain>`). Verify SPF/DKIM/DMARC. |
+| **Domain DNS** | `voiceforge.salimov.ai` (demo) | Set up production domain `<domain>` — A records, SSL, email DNS (SPF/DKIM/DMARC), CAA record for Let's Encrypt. |
+
+**ElevenLabs Plan Limits (current plan: Scale):**
+
+| | Scale (CURRENT) | Business | Enterprise |
+|--|-----------------|----------|------------|
+| **Price** | $330/mo | $1,320/mo | Custom |
+| **Minutes included** | 3,600 | 13,750 | Custom |
+| **Concurrent calls** | 30 | 30 | Elevated |
+| **Additional minutes** | $0.10/min | $0.10/min | Custom |
+| **Burst pricing** | $0.20/min | $0.19/min | Custom |
+| **Hosting cost (calls)** | $0.09/min | $0.09/min | $0.09/min |
+| **LLM tokens** | At cost | At cost | At cost |
+| **Telephony provider** | At cost | At cost | At cost |
+| **Workspace seats** | 3 | 5 | More |
+| **DPA/SLAs** | No | No | Yes |
 
 ### Operational Runbooks (Missing)
 
@@ -1260,7 +683,7 @@ For a production service, you need documented procedures for:
 
 ---
 
-## 14. Priority Roadmap
+## 7. Priority Roadmap
 
 ### Phase 0: Emergency Fixes (Before Any Production Traffic)
 
@@ -1286,8 +709,8 @@ Deployment pipeline:
 - [x] **CI pipeline done** — `.github/workflows/ci.yml` runs lint, typecheck, test, build, Docker image verification on PRs to `staging`/`production`
 - [ ] **Set up GHCR container registry** — configure GitHub Actions to build + push `api`, `web`, `worker` images tagged `sha-<commit>` + `latest` to `ghcr.io/<org>/`
 - [ ] **Build CD pipeline** — auto-deploy to staging on merge to `staging` branch, manual approval gate for production promotion, smoke tests post-deploy
-- [ ] **Set up blue-green deployment** — Nginx reverse proxy + dual Docker Compose stacks (blue/green container sets on single droplet), deploy script (`scripts/deploy-blue-green.sh`) with health check and upstream swap (see Blue-Green subsection in Section 11)
-- [ ] **Set up Docker Compose environment overrides** — create `docker-compose.yml` (base), `docker-compose.dev.yml`, `docker-compose.staging.yml`, `docker-compose.production.yml` with environment-specific resource limits and configs (see Section 11)
+- [ ] **Set up blue-green deployment** — Nginx reverse proxy + dual Docker Compose stacks (blue/green container sets on single droplet), deploy script (`scripts/deploy-blue-green.sh`) with health check and upstream swap (see Blue-Green subsection in Section 5)
+- [ ] **Set up Docker Compose environment overrides** — create `docker-compose.yml` (base), `docker-compose.dev.yml`, `docker-compose.staging.yml`, `docker-compose.production.yml` with environment-specific resource limits and configs (see Section 5)
 - [x] **Secrets management decided** — GitHub Actions secrets for CI/CD + `.env` files on server (`chmod 600`). Vault/Doppler deferred until team grows or compliance requires it.
 
 Validation:
@@ -1297,21 +720,14 @@ Validation:
 
 #### Developer Track (Code Fixes)
 
-Code-level issues (race conditions, idempotency, atomicity, missing indexes/constraints) are tracked as GitHub Issues on the project board. Key items for launch:
-- [ ] **Redis singleton connection** — fix connection-per-request anti-pattern (Section 2.1)
-- [ ] **Appointment booking race condition** — unique constraint + transactions on all 3 booking paths (Section 2.7)
-- [ ] **Call record dedup** — ON CONFLICT UPDATE in handlers, transaction wrapping (Section 2.6)
-- [ ] **Admin secret hardcoded fallback** — remove fallback, require env var (Section 2.5)
-- [ ] **Replace `drizzle-kit push` with versioned migrations** — stop using schema push in production; switch to reviewed, versioned migration files with rollback capability. Deploy via dedicated migration job, not from app container at startup
-- [ ] **Unify environment contract** — resolve inconsistencies in env var names between `.env.production.template`, runtime code, and deployment docs. One authoritative env spec so a new operator can set up without guesswork. Includes deciding API topology (same-domain path-based `https://app.domain.com/api` vs subdomain `https://api.domain.com`) and aligning `API_BASE_URL`, `FRONTEND_URL`, `NEXT_PUBLIC_API_URL`, Nginx `server_name`, and webhook callback URLs accordingly
-- [ ] **Fix lint gate** — `pnpm lint` fails because the shared package exposes a lint script without a complete ESLint config/dependency. Standardize ESLint at workspace level so `pnpm lint` passes locally and in CI
+Code-level fixes (Redis singleton, appointment race condition, call dedup, admin secret, versioned migrations, env contract, lint gate) are tracked as GitHub Issues on the project board. Both tracks must complete before production launch.
 
 #### Legal & Business Track (Shared)
 
 - [ ] **Create Terms of Service page** — `/terms` route, covering service description, liability, acceptable use, EU jurisdiction
 - [ ] **Create Privacy Policy page** — `/privacy` route, listing all sub-processors (ElevenLabs, Telnyx, Supabase, Resend, OpenAI, DigitalOcean), data retention periods, GDPR rights
 - [ ] **Collect DPAs** from each sub-processor (ElevenLabs, Telnyx, Supabase, Resend, OpenAI, DO) — most offer standard DPAs to download and countersign
-- [ ] **Supabase production config** — verify all items in Section 15 checklist (Site URL, redirect URLs, SMTP, JWT secret)
+- [ ] **Supabase production config** — verify all items in Section 8 checklist (Site URL, redirect URLs, SMTP, JWT secret)
 - ~~[ ] **Set up Stripe account and configure billing** — no Stripe account exists yet. Create account, configure products/plans (Basic €200, Pro €400, Enterprise €999), set up test mode keys for development, register webhook endpoints, switch to live mode keys before launch~~ *(Stripe removed)*
 - [x] **ElevenLabs plan verified** — Scale: 30 concurrent (sufficient for beta), 3,600 min/mo included + $0.10/min overage. Usage metering critical to track consumption.
 
@@ -1381,15 +797,15 @@ Code-level issues (race conditions, idempotency, atomicity, missing indexes/cons
 
 ---
 
-## 15. Supabase Configuration Checklist
+## 8. Supabase Configuration Checklist
 
 The app uses Supabase for production auth (JWT). These settings must be verified before launch.
 
 ### Dashboard Settings
 
 - [ ] **Authentication > Email**: Confirm email template matches VoiceForge branding
-- [ ] **Authentication > Email**: Set `Site URL` to production URL (e.g., `https://voiceforge.salimov.ai`)
-- [ ] **Authentication > Redirect URLs**: Add `https://voiceforge.salimov.ai/**`
+- [ ] **Authentication > Email**: Set `Site URL` to production URL (e.g., `https://<domain>`)
+- [ ] **Authentication > Redirect URLs**: Add `https://<domain>/**`
 - [ ] **Authentication > Providers**: Enable Email+Password (or Magic Link)
 - [ ] **Authentication > SMTP**: Configure custom SMTP (Resend integration or raw SMTP) so auth emails come from your domain, not `@supabase.io`
 - [ ] **API > JWT Secret**: Copy value to `SUPABASE_JWT_SECRET` in API env
@@ -1414,17 +830,17 @@ CREATE POLICY "customers_own_calls" ON calls
 
 ---
 
-## 16. Deployment Runbook (First Production Deploy)
+## 9. Deployment Runbook (First Production Deploy)
 
-Step-by-step sequence. Assumes current DO droplet at `voiceforge.salimov.ai` with Nginx + SSL already configured.
+Step-by-step sequence. Assumes new production DO droplet with Nginx + SSL configured for `<domain>`.
 
 ```
 Step 1: Prepare Server
-  └── Keep current droplet (4 GB / 2 vCPU). Upgrade to 8 GB only if latency issues appear.
+  └── Provision new production droplet (4 GB / 2 vCPU, FRA1). Upgrade to 8 GB only if latency issues appear.
   └── Only requirement: Docker + Docker Compose installed (no Node/pnpm/PM2 needed)
   └── Harden SSH (key-only, fail2ban, unattended-upgrades)
   └── Verify firewall: only 22, 80, 443 inbound
-  └── Clean up old co-hosted app artifacts
+  └── Set up production domain (<domain>) — A records, Nginx, Let's Encrypt SSL
 
 Step 2: Provision Managed Postgres
   └── DO Managed Postgres (FRA1, same datacenter) — $15/mo
@@ -1447,11 +863,11 @@ Step 3: Set Environment Variables
         If CI builds are introduced later, the web app will need its own .env.
 
 Step 4: Configure External Services
-  └── Supabase: Set Site URL + Redirect URLs (see Section 15)
+  └── Supabase: Set Site URL + Redirect URLs (see Section 8)
   └── ~~Stripe: Switch to live mode, set webhook endpoint to production URL~~ (Stripe removed)
   └── Telnyx: Set webhook endpoints (pre-call + post-call)
   └── ElevenLabs: Set webhook endpoint, verify plan concurrency
-  └── Resend: Verify domain auth (SPF/DKIM/DMARC for salimov.ai)
+  └── Resend: Verify domain auth (SPF/DKIM/DMARC for <domain>)
 
 Step 5: Build & Deploy
   └── git pull origin main
@@ -1460,7 +876,7 @@ Step 5: Build & Deploy
   └── Container restart policy (restart: unless-stopped) handles auto-start on reboot
 
 Step 6: Verify
-  └── curl https://voiceforge.salimov.ai/api/health
+  └── curl https://<domain>/api/health
   └── docker compose ps (all containers healthy)
   └── Open dashboard, login, create agent
   └── Test phone call end-to-end
@@ -1495,7 +911,7 @@ Retention: daily for 30 days, weekly for 1 year. Test restore monthly.
 
 ---
 
-## 17. Hypercare Plan (First 72 Hours Post-Launch)
+## 10. Hypercare Plan (First 72 Hours Post-Launch)
 
 - Continuous monitoring: error rate, latency, webhook failures, DB health, worker health
 - Log review after each deploy and after first real customer calls
@@ -1506,7 +922,7 @@ Retention: daily for 30 days, weekly for 1 year. Test restore monthly.
 
 ---
 
-## 18. Pre-Launch Checklist
+## 11. Pre-Launch Checklist
 
 ### Security
 - [ ] `ADMIN_SECRET` is random, min 32 chars, not in git, no fallback
@@ -1518,24 +934,7 @@ Retention: daily for 30 days, weekly for 1 year. Test restore monthly.
 - [ ] Telnyx webhook secret configured
 - [ ] `.env.production` permissions set to `chmod 600`
 
-### Features
-- [ ] New user registration -> welcome email received
-- [ ] Appointment booking -> confirmation email sent with .ics
-- ~~[ ] Stripe payment -> subscription activated correctly~~ *(Stripe removed)*
-- [ ] Call completed -> transcript + sentiment saved
-- [ ] Call completed -> call summary email sent
-- [ ] iCal sync working (test with real Google Calendar / iCal URL)
-- [ ] Phone number purchase -> agent rings on test call
-- [ ] SSL certificate valid and auto-renewing (Let's Encrypt + Certbot)
-- [ ] Admin panel accessible (license generation, registration approval)
-- [ ] Widget embeddable on third-party site
-
-### Data Integrity
-- [ ] Appointment double-booking fix deployed (unique constraint + transactions)
-- [ ] Call record dedup fix deployed (ON CONFLICT UPDATE)
-- ~~[ ] Stripe webhook idempotency deployed (event.id check)~~ *(Stripe removed)*
-- [ ] Redis singleton connection deployed (not per-request)
-- [ ] Load test passed on staging (20 concurrent calls, no double-bookings, no duplicate records, pre-call < 1s)
+Feature verification and data integrity checks are tracked in GitHub Issues.
 
 ### Operational
 - [ ] `/api/health` returns `{"status":"ok","db":"connected"}`
@@ -1585,29 +984,6 @@ Retention: daily for 30 days, weekly for 1 year. Test restore monthly.
 | Resend | Emails | 100/day (free), 50K/mo (paid) | Emails silently dropped |
 | OpenAI | Chat completions | 500 req/min (GPT-4o-mini) | Support chat fails |
 
-## Appendix C: Hardcoded Values That Should Be Configurable
-
-| Value | Location | Current | Should Be |
-|-------|----------|---------|-----------|
-| Admin secret fallback | `routes/admin.ts:41,62` | `'voiceforge-admin-2026'` | Required env var (no fallback) |
-| IBAN | `routes/registration.ts:30-36` | Hardcoded bank details | Env var |
-| ~~Email FROM address~~ | ~~`services/email.ts:12`~~ | ~~`'VoiceForge AI <noreply@salimov.ai>'`~~ | ~~Env var~~ **FIXED:** Now uses `env.EMAIL_FROM` |
-| Plan pricing in email | `services/email.ts` | Fixed EUR values | DB or env var |
-| ~~Business hours~~ | ~~`routes/elevenlabs-webhooks.ts`~~ | ~~09:00-17:00 hardcoded~~ | ~~Per-agent DB config~~ **FIXED:** Now per-agent via `businessHours` JSONB column + `parseBusinessHours()` service |
-| ElevenLabs SIP endpoint | `services/telnyx.ts:435` | `sip.rtc.elevenlabs.io` | Env var |
-| ~~Telnyx SIP IP whitelist~~ | ~~`services/telnyx.ts:869-874`~~ | ~~Hardcoded IPs~~ | **N/A:** No SIP IP whitelist found in current codebase (file is ~507 lines) |
-| TTS API endpoint | `services/elevenlabs.ts:808` | `api.elevenlabs.io` | SDK constant or env var |
-
-## Appendix D: Known TODOs in Codebase
-
-| Location | TODO | Severity |
-|----------|------|----------|
-| `routes/agents.ts:300` | `totalCalls: 0` hardcoded — should be COUNT(*) from calls table | Medium |
-| ~~`routes/elevenlabs-webhooks.ts`~~ | ~~Business hours hardcoded in multiple places~~ **FIXED:** Now per-agent via `businessHours` JSONB column | ~~Medium~~ |
-| `routes/tools.ts:99` | Query Google Calendar API if connected | Low (MVP works without) |
-| `routes/tools.ts:212` | Sync bookings to Google Calendar | Low (MVP works without) |
-| `routes/tools.ts:213` | Send push notification to customer | Low |
-
 ---
 
-*Last updated: 2026-03-19 (re-audit). Original audit: 2026-03-18. Capacity estimates based on real-world use case: medium business with 4 agents handling 20 concurrent calls. Infrastructure recommendations based on current DO Basic 4 GB / 2 vCPU droplet (FRA1) running demo at voiceforge.salimov.ai.*
+*Last updated: 2026-03-24. Original audit: 2026-03-18. Code-level issues tracked in GitHub Issues. This document covers DevOps, infrastructure, and operational readiness only. Infrastructure recommendations based on DigitalOcean (FRA1 datacenter).*
